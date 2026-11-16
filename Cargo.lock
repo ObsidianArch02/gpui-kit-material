@@ -2608,6 +2608,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "gpui-base",
+ "gpui-fast",
  "gpui-kit",
  "gpui-kit-material-color",
  "gpui-material-symbols",
