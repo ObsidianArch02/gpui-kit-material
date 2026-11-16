@@ -106,6 +106,41 @@ use crate::{App, Bounds, FocusId, Pixels, SharedString, Window};
 use accesskit::{Action, NodeId, TreeUpdate};
 use collections::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
+use std::cell::RefCell;
+
+thread_local! {
+    static INITIAL_CAPTURE_HANDLES: RefCell<FxHashMap<WindowId, (AnyWindowHandle, AsyncApp)>> =
+        RefCell::new(FxHashMap::default());
+}
+
+pub(crate) fn register_initial_capture_handle(handle: AnyWindowHandle, async_cx: AsyncApp) {
+    INITIAL_CAPTURE_HANDLES.with(|handles| {
+        let mut handles = handles.borrow_mut();
+        handles.retain(|_, (_, cx)| cx.app.strong_count() > 0);
+        handles.insert(handle.window_id(), (handle, async_cx));
+    });
+}
+
+pub(crate) fn unregister_initial_capture_handle(window_id: WindowId) {
+    INITIAL_CAPTURE_HANDLES.with(|handles| {
+        handles.borrow_mut().remove(&window_id);
+    });
+}
+
+pub(crate) fn capture_initial_tree_for_window(window_id: WindowId) -> Option<TreeUpdate> {
+    let (handle, mut async_cx) =
+        INITIAL_CAPTURE_HANDLES.with(|handles| handles.borrow().get(&window_id).cloned())?;
+    if async_cx.app.strong_count() == 0 {
+        unregister_initial_capture_handle(window_id);
+        return None;
+    }
+    handle
+        .update(&mut async_cx, |_, window, cx| {
+            window.capture_initial_a11y_tree(cx)
+        })
+        .ok()
+        .flatten()
+}
 use std::hash::{Hash, Hasher};
 use std::sync::{
     Arc,
@@ -145,6 +180,8 @@ pub(crate) struct A11y {
     /// At the end of the frame, we re-call [`Self::sync_active_flag`] to
     /// determine whether we should actually send the finished [`TreeUpdate`].
     active_this_frame: bool,
+    pub(crate) suppress_platform_update: bool,
+    pub(crate) captured_initial_update: Option<TreeUpdate>,
     pub(crate) nodes: A11yNodeBuilder,
     pub(crate) focus_ids: FxHashMap<NodeId, FocusId>,
     pub(crate) node_bounds: FxHashMap<NodeId, Bounds<Pixels>>,
@@ -179,6 +216,8 @@ impl A11y {
             action_listeners: FxHashMap::default(),
             window_title,
             last_focus_without_node: None,
+            suppress_platform_update: false,
+            captured_initial_update: None,
             debug: debug::A11yDebug::default(),
             #[cfg(debug_assertions)]
             view_type_names: FxHashMap::default(),
@@ -191,6 +230,11 @@ impl A11y {
     /// of the focused element. The fix is to give the element both an
     /// `.id(...)` and a `.role(...)`.
     pub(crate) fn note_focus_without_node(&mut self, focus_id: FocusId, reason: &str) {
+        if self.focus_ids.iter().any(|(node_id, candidate)| {
+            *candidate == focus_id && self.nodes.has_node(*node_id)
+        }) {
+            return;
+        }
         if self.last_focus_without_node != Some(focus_id) {
             self.last_focus_without_node = Some(focus_id);
             log::info!(
@@ -337,6 +381,49 @@ impl<'a> A11ySubtreeBuilder<'a> {
         self.parent_id.0.hash(&mut hasher);
         key.hash(&mut hasher);
         NodeId(hasher.finish())
+    }
+
+    /// https://docs.rs/accesskit/latest/accesskit/ Return the parent accessibility node ID.
+    pub fn parent_id(&self) -> NodeId {
+        self.parent_id
+    }
+
+    /// https://docs.rs/accesskit/latest/accesskit/ Replace the children list on an existing accessibility node.
+    pub fn set_node_children(&mut self, id: NodeId, children: Vec<NodeId>) -> bool {
+        if id != self.parent_id && self.nodes.ids_stack.contains(&id) {
+            return false;
+        }
+        let Some(node) = self.node_mut(id) else {
+            return false;
+        };
+        node.set_children(children);
+        true
+    }
+
+    /// https://docs.rs/accesskit/latest/accesskit/ Look up an existing accessibility node by ID.
+    pub fn node(&self, id: NodeId) -> Option<&accesskit::Node> {
+        if let Some(index) = self.nodes.ids_stack.iter().position(|candidate| *candidate == id) {
+            return self.nodes.nodes_stack.get(index);
+        }
+        self.nodes
+            .all_nodes
+            .iter()
+            .rev()
+            .find(|(candidate, _)| *candidate == id)
+            .map(|(_, node)| node)
+    }
+
+    /// https://docs.rs/accesskit/latest/accesskit/ Mutably look up an existing accessibility node by ID.
+    pub fn node_mut(&mut self, id: NodeId) -> Option<&mut accesskit::Node> {
+        if let Some(index) = self.nodes.ids_stack.iter().position(|candidate| *candidate == id) {
+            return self.nodes.nodes_stack.get_mut(index);
+        }
+        self.nodes
+            .all_nodes
+            .iter_mut()
+            .rev()
+            .find(|(candidate, _)| *candidate == id)
+            .map(|(_, node)| node)
     }
 
     /// Append a synthetic leaf node as a child of this element's node.

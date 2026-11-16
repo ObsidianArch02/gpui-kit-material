@@ -1752,12 +1752,17 @@ impl Window {
             let (action_sender, action_receiver) =
                 async_channel::unbounded::<accesskit::ActionRequest>();
 
+            a11y::register_initial_capture_handle(handle, cx.to_async());
             platform_window.a11y_init(crate::A11yCallbacks {
                 activation: {
                     let active_flag = a11y_active_flag.clone();
+                    let window_id = handle.window_id();
                     Box::new(move || {
                         log::info!("Accessibility activated");
                         active_flag.store(true, SeqCst);
+                        if let Some(tree) = a11y::capture_initial_tree_for_window(window_id) {
+                            return Some(tree);
+                        }
                         activation_sender
                             .send_blocking(())
                             .with_context(|| {
@@ -2598,6 +2603,7 @@ impl Window {
     /// Close this window.
     pub fn remove_window(&mut self) {
         self.removed = true;
+        a11y::unregister_initial_capture_handle(self.handle.window_id());
     }
 
     /// Obtain the currently focused [`FocusHandle`]. If no elements are focused, returns `None`.
@@ -3853,6 +3859,24 @@ impl Window {
         profiling::finish_frame!();
     }
 
+    pub(crate) fn capture_initial_a11y_tree(
+        &mut self,
+        cx: &mut App,
+    ) -> Option<accesskit::TreeUpdate> {
+        if !self.a11y.is_enabled() || !self.invalidator.not_drawing() {
+            return None;
+        }
+        self.a11y.sync_active_flag();
+        let had_suppress = self.a11y.suppress_platform_update;
+        self.a11y.suppress_platform_update = true;
+        self.a11y.captured_initial_update = None;
+        self.refresh();
+        let arena = self.draw(cx);
+        self.a11y.suppress_platform_update = had_suppress;
+        arena.clear(cx);
+        self.a11y.captured_initial_update.take()
+    }
+
     /// Presents the most recently drawn frame if it hasn't been presented yet.
     #[cfg(all(test, feature = "profiler"))]
     pub fn present_if_needed(&mut self) {
@@ -4022,7 +4046,9 @@ impl Window {
             // clear the builder state regardless
             let tree_update = self.a11y.end_frame(frame_info);
 
-            if should_send_a11y_update {
+            if self.a11y.suppress_platform_update {
+                self.a11y.captured_initial_update = Some(tree_update);
+            } else if should_send_a11y_update {
                 log::debug!(
                     "Sending a11y tree update: {} nodes",
                     tree_update.nodes.len()
@@ -7283,6 +7309,22 @@ impl Window {
     /// that are only needed for accessibility.
     pub fn is_a11y_enabled(&self) -> bool {
         self.a11y.is_enabled()
+    }
+
+    /// https://docs.rs/accesskit/latest/accesskit/ Register a focus handle on an accessibility node.
+    pub fn set_a11y_focus_handle(
+        &mut self,
+        element_id: &GlobalElementId,
+        focus_handle: &FocusHandle,
+    ) {
+        if !self.a11y.is_active() {
+            return;
+        }
+        let node_id = element_id.accesskit_node_id();
+        self.a11y.set_focusable(node_id, focus_handle.id);
+        if focus_handle.is_focused(self) {
+            self.a11y.set_focus(node_id);
+        }
     }
 
     /// Returns whether accessibility features are active for this frame,
