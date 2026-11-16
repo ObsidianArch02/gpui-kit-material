@@ -146,6 +146,35 @@ M3 roles and type. Each is opt-in: the M3 defaults do not change.
 | Icons | Implemented | Material Symbols | Provenance in Symbols repository | Six approximate Kit translations unreviewed |
 | Scoped theme | Implemented, with limits | n/a | Tests in `src/scope/tests.rs` | Kit controls inside a scope, including Kit's `Root` overlays, tooltips and scrollbar styles, follow the application's theme: a scope does not touch Kit's theme globals (Material's text inputs give Kit's input their scoped caret and selection). Drag previews outside `current_scope` keep the application theme. Under GPUI Fast the view holding a scheme scope rebuilds on each draw that reaches it; nothing outside it does |
 
+## Text field accessibility boundary
+
+Supporting text and character counts have text nodes. The existing field container
+exposes their combined description as a group. An error marks that group invalid
+and gives the supporting text an assertive live alert with a value. The editor remains Kit's single
+input node, including its sensitive-value masking and actions.
+
+The local Base and Component patches pass descriptions and invalid states through
+`InputAccessibility`, `Input` and `Textarea` to the focused editor. Each render
+replaces these values. Native error announcements remain unverified for this
+source revision. GPUI's debug JSON omits disabled and invalid states.
+
+`status_text` publishes a polite live status with a value. `error_text` publishes
+an assertive live alert with a value. Painted component tests inspect those real
+AccessKit nodes through a test-only observer because the debug JSON omits live
+settings. They cover feedback addition, changes and removal. They do not verify
+audible announcements from VoiceOver.
+
+List rows omit selection state unless the caller sets `selected` or adds a radio.
+Both explicit selection values remain available for selectable destinations.
+
+## TextView accessibility boundary
+
+The local Base patch exports full document text and structure. Visible text runs
+use real glyph bounds, line links and screen scale. Selection actions use the
+existing selection and copy state. Custom objects reuse their visual nodes.
+Unpainted text has no measured bounds. Ligature characters share cluster bounds.
+The current source has not been built or tested.
+
 ## Cross-cutting status
 
 Status of each [production criterion](PRODUCTION.md) across all components.

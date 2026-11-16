@@ -5,6 +5,7 @@ use super::*;
 use gpui::{
     Context, Entity, IntoElement, Render, SharedString, TestAppContext, Window, div, prelude::*, px,
 };
+use gpui_base::input::{InputState, TextareaState};
 use gpui_base::slider::SliderState;
 use serde_json::Value;
 
@@ -167,6 +168,545 @@ fn labelled<'a>(nodes: &'a [Value], role: &str, label: &str, tree: &str) -> &'a 
         .unwrap_or_else(|| panic!("no {role} named {label:?} in {tree}"))
 }
 
+fn a11y_child(test: &str) -> bool {
+    if std::env::var("GPUI_A11Y_ACTIVE").as_deref() == Ok("1") {
+        return false;
+    }
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            &format!("components::a11y_tests::{test}"),
+            "--nocapture",
+        ])
+        .env("GPUI_A11Y_ACTIVE", "1")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "{stdout}{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains(test),
+        "the child ran no assertions: {stdout}"
+    );
+    true
+}
+
+fn painted_tree(cx: &mut gpui::VisualTestContext) -> String {
+    for _ in 0..3 {
+        cx.update(|window, cx| {
+            window.refresh();
+            window.draw(cx).clear(cx);
+        });
+        cx.run_until_parked();
+    }
+    cx.update(|window, _| window.debug_a11y_tree_json().expect("accessibility on"))
+}
+
+struct RowSemantics;
+impl Render for RowSemantics {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_col()
+            .size_full()
+            .child(
+                ListItem::new("static-row", "Transcriber")
+                    .overline("Tools")
+                    .supporting("Installed")
+                    .trailing_text("1.2")
+                    .disabled(true),
+            )
+            .child(
+                ListItem::new("action-row", "Meeting")
+                    .overline("Today")
+                    .supporting("Ready")
+                    .trailing_text("5 min")
+                    .disabled(true)
+                    .on_click(|_, _, _| {}),
+            )
+            .child(
+                ListItem::new("tree-row", "Lectures")
+                    .role(gpui::Role::TreeItem)
+                    .aria_expanded(false)
+                    .aria_level(2)
+                    .aria_position_in_set(3)
+                    .aria_size_of_set(7)
+                    .selected(true)
+                    .on_click(|_, _, _| {}),
+            )
+            .child(
+                ListItem::new("static-tree-row", "Archive")
+                    .role(gpui::Role::TreeItem)
+                    .aria_expanded(true)
+                    .aria_level(1)
+                    .aria_position_in_set(1)
+                    .aria_size_of_set(2),
+            )
+            .child(ListItem::new("default-action", "Open").on_click(|_, _, _| {}))
+            .child(ListItem::new("unselected-static", "Unselected item").selected(false))
+            .child(
+                ListItem::new("unselected-action", "Other destination")
+                    .selected(false)
+                    .on_click(|_, _, _| {}),
+            )
+            .child(
+                ListItem::new("radio-row", "Other radio")
+                    .leading(ListLeading::Radio(false))
+                    .on_click(|_, _, _| {}),
+            )
+    }
+}
+
+#[gpui::test]
+fn list_rows_publish_text_and_optional_structure(cx: &mut TestAppContext) {
+    const TEST: &str = "list_rows_publish_text_and_optional_structure";
+    if a11y_child(TEST) {
+        return;
+    }
+    cx.update(|cx| {
+        gpui_kit::init(cx);
+        crate::init(cx);
+        cx.set_reduce_motion(true);
+    });
+    let (_, cx) = cx.add_window_view(|_, _| RowSemantics);
+    let tree = painted_tree(cx);
+    let all = nodes(&tree);
+    let static_row = labelled(&all, "listItem", "Transcriber", &tree);
+    assert_eq!(static_row["description"], "Tools\nInstalled\n1.2", "{tree}");
+    assert!(
+        static_row.get("selected").is_none_or(Value::is_null),
+        "{tree}"
+    );
+    let action = labelled(&all, "button", "Meeting", &tree);
+    assert_eq!(action["description"], "Today\nReady\n5 min", "{tree}");
+    assert!(action.get("selected").is_none_or(Value::is_null), "{tree}");
+    assert!(
+        action["on_action"]
+            .as_array()
+            .is_none_or(|actions| !actions.iter().any(|action| action == "Click")),
+        "{tree}"
+    );
+    for (label, expanded, level, position, size) in
+        [("Lectures", false, 2, 3, 7), ("Archive", true, 1, 1, 2)]
+    {
+        let row = labelled(&all, "treeItem", label, &tree);
+        assert_eq!(row["expanded"], expanded, "{tree}");
+        assert_eq!(row["level"], level, "{tree}");
+        assert_eq!(row["position_in_set"], position, "{tree}");
+        assert_eq!(row["size_of_set"], size, "{tree}");
+    }
+    assert_eq!(
+        labelled(&all, "treeItem", "Lectures", &tree)["selected"],
+        true
+    );
+    assert!(
+        labelled(&all, "treeItem", "Archive", &tree)
+            .get("selected")
+            .is_none_or(Value::is_null),
+        "{tree}"
+    );
+    assert_eq!(
+        labelled(&all, "listItem", "Unselected item", &tree)["selected"],
+        false,
+        "{tree}"
+    );
+    assert_eq!(
+        labelled(&all, "button", "Other destination", &tree)["selected"],
+        false,
+        "{tree}"
+    );
+    assert_eq!(
+        labelled(&all, "button", "Other radio", &tree)["selected"],
+        false,
+        "{tree}"
+    );
+    let default = labelled(&all, "button", "Open", &tree);
+    assert!(
+        default["on_action"]
+            .as_array()
+            .is_some_and(|actions| actions.iter().any(|action| action == "Click")),
+        "{default}"
+    );
+    for key in [
+        "expanded",
+        "level",
+        "position_in_set",
+        "size_of_set",
+        "description",
+        "selected",
+    ] {
+        assert!(default.get(key).is_none_or(Value::is_null), "{default}");
+    }
+    println!("{TEST}");
+}
+
+struct FieldSemantics {
+    input: Entity<InputState>,
+    area: Entity<TextareaState>,
+    error: bool,
+    feedback: bool,
+    supporting: &'static str,
+}
+
+impl Render for FieldSemantics {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_col()
+            .size_full()
+            .child(
+                TextField::new("secret", &self.input)
+                    .label("API key")
+                    .input_type(TextFieldInputType::Password)
+                    .error(self.error)
+                    .when(self.feedback, |field| {
+                        field.supporting_text(self.supporting).max_length(20)
+                    }),
+            )
+            .child(
+                TextField::multi_line("notes", &self.area)
+                    .label("Notes")
+                    .supporting_text("Plain text")
+                    .max_length(50),
+            )
+    }
+}
+
+#[gpui::test]
+fn text_fields_publish_feedback_without_exposing_secrets(cx: &mut TestAppContext) {
+    const TEST: &str = "text_fields_publish_feedback_without_exposing_secrets";
+    if a11y_child(TEST) {
+        return;
+    }
+    cx.update(|cx| {
+        gpui_kit::init(cx);
+        crate::init(cx);
+        cx.set_reduce_motion(true);
+    });
+    let (view, cx) = cx.add_window_view(|window, cx| FieldSemantics {
+        input: cx.new(|cx| InputState::new(window, cx).default_value("private-token")),
+        area: cx.new(|cx| TextareaState::new(window, cx).default_value("\u{e9}\u{1f600}")),
+        error: false,
+        feedback: true,
+        supporting: "Use a project key",
+    });
+    super::text::observe_live_text_nodes();
+    let tree = painted_tree(cx);
+    assert!(super::text::take_live_text_nodes().is_empty());
+    let all = nodes(&tree);
+    let secret = labelled(&all, "group", "API key", &tree);
+    assert_eq!(secret["description"], "Use a project key\n13/20", "{tree}");
+    labelled(&all, "label", "Use a project key", &tree);
+    labelled(&all, "label", "13/20", &tree);
+    let notes = labelled(&all, "group", "Notes", &tree);
+    assert_eq!(notes["description"], "Plain text\n2/50", "{tree}");
+    labelled(&all, "label", "Plain text", &tree);
+    labelled(&all, "label", "2/50", &tree);
+    let input = labelled(&all, "passwordInput", "API key", &tree);
+    assert_eq!(
+        input.get("description").and_then(Value::as_str),
+        Some("Use a project key\n13/20"),
+        "expected forwarded supporting text description: {tree}"
+    );
+    let input = labelled(&all, "multilineTextInput", "Notes", &tree);
+    assert_eq!(
+        input.get("description").and_then(Value::as_str),
+        Some("Plain text\n2/50"),
+        "expected forwarded supporting text description: {tree}"
+    );
+    assert!(!tree.contains("private-token"), "{tree}");
+
+    view.update(cx, |view, cx| {
+        view.error = true;
+        cx.notify();
+    });
+    super::text::observe_live_text_nodes();
+    let tree = painted_tree(cx);
+    assert_live_text_nodes(
+        &super::text::take_live_text_nodes(),
+        gpui::Role::Alert,
+        "Use a project key",
+        gpui::accesskit::Live::Assertive,
+    );
+    let all = nodes(&tree);
+    assert_eq!(
+        labelled(&all, "alert", "Use a project key", &tree)["value"],
+        "Use a project key",
+        "{tree}"
+    );
+    assert!(!tree.contains("private-token"), "{tree}");
+
+    view.update(cx, |view, cx| {
+        view.supporting = "Key expired";
+        cx.notify();
+    });
+    super::text::observe_live_text_nodes();
+    let tree = painted_tree(cx);
+    assert_live_text_nodes(
+        &super::text::take_live_text_nodes(),
+        gpui::Role::Alert,
+        "Key expired",
+        gpui::accesskit::Live::Assertive,
+    );
+    let all = nodes(&tree);
+    assert_eq!(
+        labelled(&all, "alert", "Key expired", &tree)["value"],
+        "Key expired",
+        "{tree}"
+    );
+    assert_eq!(
+        labelled(&all, "group", "API key", &tree)["description"],
+        "Key expired\n13/20",
+        "{tree}"
+    );
+    assert!(!tree.contains("private-token"), "{tree}");
+
+    view.update(cx, |view, cx| {
+        view.error = false;
+        cx.notify();
+    });
+    super::text::observe_live_text_nodes();
+    let tree = painted_tree(cx);
+    assert!(super::text::take_live_text_nodes().is_empty());
+    let all = nodes(&tree);
+    labelled(&all, "group", "API key", &tree);
+    labelled(&all, "label", "Key expired", &tree);
+    assert!(
+        !all.iter().any(|node| node["role"]
+            .as_str()
+            .is_some_and(|role| role.eq_ignore_ascii_case("alert"))),
+        "{tree}"
+    );
+
+    view.update(cx, |view, cx| {
+        view.feedback = false;
+        cx.notify();
+    });
+    super::text::observe_live_text_nodes();
+    let tree = painted_tree(cx);
+    assert!(super::text::take_live_text_nodes().is_empty());
+    let all = nodes(&tree);
+    assert!(
+        !all.iter()
+            .any(|node| node["description"] == "Key expired\n13/20"),
+        "{tree}"
+    );
+    assert!(!all.iter().any(|node| node["label"] == "13/20"), "{tree}");
+    labelled(&all, "passwordInput", "API key", &tree);
+    assert!(!tree.contains("private-token"), "{tree}");
+    println!("{TEST}");
+}
+
+fn assert_live_text_nodes(
+    nodes: &[gpui::accesskit::Node],
+    role: gpui::Role,
+    value: &str,
+    live: gpui::accesskit::Live,
+) {
+    assert!(!nodes.is_empty(), "no live text node was painted");
+    for node in nodes {
+        assert_eq!(node.role(), role, "{node:?}");
+        assert_eq!(node.label(), Some(value), "{node:?}");
+        assert_eq!(node.value(), Some(value), "{node:?}");
+        assert_eq!(node.live(), Some(live), "{node:?}");
+    }
+}
+
+struct LiveStatus(Option<&'static str>);
+impl Render for LiveStatus {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .children(self.0.map(|message| status_text("status", message)))
+    }
+}
+
+struct BorrowedButtonText<'a>(&'a str);
+impl IntoElement for BorrowedButtonText<'_> {
+    type Element = SharedString;
+
+    fn into_element(self) -> Self::Element {
+        self.0.to_owned().into()
+    }
+}
+
+struct ButtonNames;
+
+fn add_label<T: gpui::ParentElement>(button: T) -> T {
+    button.child("Generic label")
+}
+
+impl Render for ButtonNames {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let borrowed = String::from("Borrowed text");
+        div()
+            .flex()
+            .flex_col()
+            .items_start()
+            .size_full()
+            .child(MaterialButton::new("literal").child("Skip setup"))
+            .child(MaterialButton::new("owned").child(String::from("Save and continue")))
+            .child(MaterialButton::new("shared").child(SharedString::new_static("Choose folder")))
+            .child(MaterialButton::new("cow").child(std::borrow::Cow::Borrowed("Open settings")))
+            .child(MaterialButton::new("borrowed-builder").child(BorrowedButtonText(&borrowed)))
+            .child(
+                MaterialButton::new("icon-and-text")
+                    .icon(crate::icons::Symbol::CHECK)
+                    .child("Confirm selection"),
+            )
+            .child(
+                MaterialButton::new("explicit-first")
+                    .accessibility_label("Save the current note")
+                    .child("Save"),
+            )
+            .child(
+                MaterialButton::new("explicit-last")
+                    .child("Continue")
+                    .accessibility_label("Continue to settings"),
+            )
+            .child(
+                MaterialButton::new("blank")
+                    .accessibility_label("Blank content action")
+                    .child(""),
+            )
+            .child(
+                MaterialButton::new("custom")
+                    .child(div().child("Custom visual content"))
+                    .accessibility_label("Custom content action"),
+            )
+            .child(
+                MaterialButton::new("aria-first")
+                    .aria_label("Save the current collection")
+                    .child("Save collection"),
+            )
+            .child(
+                MaterialButton::new("aria-last")
+                    .child("Finish")
+                    .aria_label("Finish setup"),
+            )
+            .child(MaterialButton::new("collection").children(["Save collection"]))
+            .child(add_label(MaterialButton::new("generic")))
+            .child(
+                MaterialButton::new("mixed")
+                    .child("Save")
+                    .children(["and continue"]),
+            )
+    }
+}
+
+#[gpui::test]
+fn buttons_derive_names_from_direct_text_and_preserve_explicit_labels(cx: &mut TestAppContext) {
+    const TEST: &str = "buttons_derive_names_from_direct_text_and_preserve_explicit_labels";
+    if a11y_child(TEST) {
+        return;
+    }
+    cx.update(|cx| {
+        gpui_kit::init(cx);
+        crate::init(cx);
+        cx.set_reduce_motion(true);
+    });
+    let (_, cx) = cx.add_window_view(|_, _| ButtonNames);
+    let tree = painted_tree(cx);
+    let all = nodes(&tree);
+    let buttons: Vec<_> = all
+        .iter()
+        .filter(|node| {
+            node["role"]
+                .as_str()
+                .is_some_and(|role| role.eq_ignore_ascii_case("button"))
+        })
+        .collect();
+    assert_eq!(
+        buttons.len(),
+        15,
+        "each component publishes one button: {tree}"
+    );
+    for name in [
+        "Skip setup",
+        "Save and continue",
+        "Choose folder",
+        "Open settings",
+        "Borrowed text",
+        "Confirm selection",
+        "Save the current note",
+        "Continue to settings",
+        "Blank content action",
+        "Custom content action",
+        "Save the current collection",
+        "Finish setup",
+        "Save collection",
+        "Generic label",
+    ] {
+        labelled(&all, "button", name, &tree);
+    }
+    assert_eq!(
+        buttons
+            .iter()
+            .filter(|button| button["label"] == "Save and continue")
+            .count(),
+        2,
+        "direct text and mixed insertion paths have the complete name: {tree}"
+    );
+    println!("{TEST}");
+}
+
+#[gpui::test]
+fn status_text_publishes_polite_live_values_on_changes(cx: &mut TestAppContext) {
+    const TEST: &str = "status_text_publishes_polite_live_values_on_changes";
+    if a11y_child(TEST) {
+        return;
+    }
+    cx.update(|cx| {
+        gpui_kit::init(cx);
+        crate::init(cx);
+        cx.set_reduce_motion(true);
+    });
+    let (view, cx) = cx.add_window_view(|_, _| LiveStatus(None));
+    super::text::observe_live_text_nodes();
+    painted_tree(cx);
+    assert!(super::text::take_live_text_nodes().is_empty());
+    for (message, spoken) in [
+        ("Waiting for scan", "Waiting for scan"),
+        ("Confirm\u{2060} login", "Confirm login"),
+    ] {
+        view.update(cx, |view, cx| {
+            view.0 = Some(message);
+            cx.notify();
+        });
+        super::text::observe_live_text_nodes();
+        let tree = painted_tree(cx);
+        assert_live_text_nodes(
+            &super::text::take_live_text_nodes(),
+            gpui::Role::Status,
+            spoken,
+            gpui::accesskit::Live::Polite,
+        );
+        let all = nodes(&tree);
+        assert_eq!(
+            labelled(&all, "status", spoken, &tree)["value"],
+            spoken,
+            "{tree}"
+        );
+    }
+    view.update(cx, |view, cx| {
+        view.0 = None;
+        cx.notify();
+    });
+    super::text::observe_live_text_nodes();
+    let tree = painted_tree(cx);
+    assert!(super::text::take_live_text_nodes().is_empty());
+    assert!(
+        !nodes(&tree).iter().any(|node| node["role"]
+            .as_str()
+            .is_some_and(|role| role.eq_ignore_ascii_case("status"))),
+        "{tree}"
+    );
+    println!("{TEST}");
+}
+
 #[gpui::test]
 fn overlays_rows_and_items_announce_names_and_states(cx: &mut TestAppContext) {
     if std::env::var("GPUI_A11Y_ACTIVE").as_deref() != Ok("1") {
@@ -286,6 +826,15 @@ fn overlays_rows_and_items_announce_names_and_states(cx: &mut TestAppContext) {
     // A dropdown with the caller's menu announces the value it shows.
     let model = labelled(&all, "comboBox", "Model", &tree);
     assert_eq!(model["value"], "Deep", "{model}");
+    let actions = model["on_action"]
+        .as_array()
+        .unwrap_or_else(|| panic!("expected actions on {model}"));
+    for expected in ["Click", "Expand", "Collapse"] {
+        assert!(
+            actions.iter().any(|action| action == expected),
+            "missing {expected} action on {model}"
+        );
+    }
 
     // A clipped value's tooltip does not describe the field again: the field's
     // accessible value is already the whole text.
