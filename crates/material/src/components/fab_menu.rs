@@ -372,16 +372,6 @@ impl FabMenu {
         if let Some(state) = self.preview {
             toggle = toggle.preview_state(state);
         }
-        if let Some(callback) = self.on_toggle.clone() {
-            // `MenuPopup` toggles on the pointer press over the FAB, so its
-            // click handles only keys (handling the pointer click too would
-            // re-toggle once the press re-rendered `open`).
-            toggle = toggle.on_click(move |event, window, cx| {
-                if matches!(event, ClickEvent::Keyboard(_)) {
-                    callback(&!open, window, cx)
-                }
-            });
-        }
         let menu = MaterialMenu::new((self.id.clone(), "fab-menu-list"))
             .style(MenuStyle::Baseline)
             .items(self.items.into_iter().map(FabMenuItem::menu_item));

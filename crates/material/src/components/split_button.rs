@@ -206,15 +206,8 @@ impl RenderOnce for SplitButton {
             trailing = trailing.preview_state(state);
         }
         let has_menu = self.menu.is_some() && !self.disabled;
-        if let Some(callback) = self.on_toggle.clone() {
-            // With a menu, `MenuPopup` toggles on the pointer press over the
-            // segment, so its click handles only keys (handling the pointer
-            // click too would re-toggle once the press re-rendered `open`).
-            trailing = trailing.on_click(move |event, window, cx| {
-                if !has_menu || matches!(event, ClickEvent::Keyboard(_)) {
-                    callback(&!open, window, cx)
-                }
-            });
+        if !has_menu && let Some(callback) = self.on_toggle.clone() {
+            trailing = trailing.on_click(move |_, window, cx| callback(&!open, window, cx));
         }
         let trailing = match self.menu {
             Some(menu) if has_menu => {

@@ -1210,7 +1210,7 @@ impl Render for ButtonTrigger {
 }
 
 #[gpui::test]
-fn a_material_button_trigger_toggles_the_menu_by_pointer(cx: &mut TestAppContext) {
+fn a_material_button_trigger_toggles_the_menu_by_pointer_and_keyboard(cx: &mut TestAppContext) {
     cx.update(|cx| {
         gpui_kit::init(cx);
         crate::init(cx);
@@ -1225,6 +1225,20 @@ fn a_material_button_trigger_toggles_the_menu_by_pointer(cx: &mut TestAppContext
     cx.simulate_click(trigger, Modifiers::default());
     settle(cx);
     cx.update(|_, cx| assert!(!view.read(cx).open, "a second press closes it"));
+
+    // Tab to the button trigger without a manual keyboard on_click workaround:
+    // both Enter and Space open the menu, and Escape returns focus so the next
+    // key opens it again.
+    cx.update(|window, cx| window.focus_next(cx));
+    settle(cx);
+    for key in ["enter", "space"] {
+        cx.simulate_keystrokes(key);
+        settle(cx);
+        cx.update(|_, cx| assert!(view.read(cx).open, "{key} opens the menu"));
+        cx.simulate_keystrokes("escape");
+        settle(cx);
+        cx.update(|_, cx| assert!(!view.read(cx).open, "escape closes after {key}"));
+    }
 }
 
 struct FullWidthDropdown {

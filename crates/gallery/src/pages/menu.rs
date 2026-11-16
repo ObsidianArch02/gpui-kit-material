@@ -225,18 +225,9 @@ impl Page {
                     ),
             )
             .width(240.);
-        let edit_open = self.edit_open;
         let edit = MenuPopup::new(
             "edit-popup",
-            material_button("edit-trigger", ButtonVariant::Tonal)
-                .child("Edit")
-                .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
-                    // Pointer presses reach the popover; keys arrive here.
-                    if matches!(event, ClickEvent::Keyboard(_)) {
-                        this.edit_open = !edit_open;
-                        cx.notify();
-                    }
-                })),
+            material_button("edit-trigger", ButtonVariant::Tonal).child("Edit"),
             edit_menu,
         )
         .open(self.edit_open)
@@ -274,18 +265,11 @@ impl Page {
                             .on_click(act("Filter", cx)),
                     ),
             );
-        let view_open = self.view_open;
         let view = MenuPopup::new(
             "view-popup",
             material_button("view-trigger", ButtonVariant::Filled)
                 .icon(symbol("more_vert", false))
-                .accessibility_label("View options")
-                .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
-                    if matches!(event, ClickEvent::Keyboard(_)) {
-                        this.view_open = !view_open;
-                        cx.notify();
-                    }
-                })),
+                .accessibility_label("View options"),
             view_menu,
         )
         .open(self.view_open)
