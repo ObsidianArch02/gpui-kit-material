@@ -7,6 +7,28 @@ commit messages.
 
 Nothing yet.
 
+## gpui-kit-material 0.1.5 (2026-11-16)
+
+`gpui-kit-material` 0.1.5 requires `gpui-kit-material-color` 0.1.1 (unchanged, so not
+released again) and builds on `gpui-kit` 0.9.1. The consumer patch set is unchanged
+since 0.1.3.
+
+### Added
+
+- `ButtonTone::Danger` paints Material 3 error roles (`ERROR` / `ON_ERROR` when filled,
+  `ERROR_CONTAINER` / `ON_ERROR_CONTAINER` when tonal, and `ERROR` content and outline
+  otherwise) across `MaterialButton`, `IconButton` and `ButtonGroup`, with matching
+  hover, focus, press and ripple state layers.
+
+### Fixed
+
+- `MenuPopup` now toggles from keyboard activation (`Enter` and `Space`) on focusable
+  button triggers (`MaterialButton`, `IconButton`) without requiring callers to attach
+  a custom `on_click` filtering `ClickEvent::Keyboard`.
+- Constrained `gpui-fast` to `=0.1.15` when `gpui-fast` is enabled alongside
+  `gpui-base` 0.9.1 so fresh registry resolves remain compatible after `gpui-fast`
+  0.1.16's blanket `IntoElement` change.
+
 ## gpui-kit-material 0.1.4 (2026-11-14)
 
 `gpui-kit-material` 0.1.4 requires `gpui-kit-material-color` 0.1.1 (unchanged, so not

@@ -2603,7 +2603,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-kit-material"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2619,7 +2619,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-kit-material-bench"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "gpui-base",
@@ -2638,7 +2638,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-kit-material-gallery"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "gpui-base",
@@ -2651,7 +2651,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-kit-material-gallery-web"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "gpui-kit",
  "gpui-kit-material",
