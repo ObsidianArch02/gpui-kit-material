@@ -1080,6 +1080,7 @@ impl RenderOnce for MaterialDialog {
         };
         let host = gpui_base::Dialog::new(cx)
             .open(true)
+            .modal(open)
             .when_some(name, |dialog, name| dialog.accessibility_label(name))
             .focus_handle(focus)
             .close_on_escape(dismiss_on_escape)

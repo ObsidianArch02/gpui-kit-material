@@ -431,6 +431,11 @@ impl RenderOnce for MaterialSideSheet {
             let surface = div()
                 .id(id)
                 .role(Role::Dialog)
+                .when(open, |surface| {
+                    surface.a11y_synthetic_children(|builder| {
+                        builder.parent_node().set_modal();
+                    })
+                })
                 .when_some(name, |surface, name| surface.aria_label(name))
                 .absolute()
                 .top_0()
@@ -1121,6 +1126,11 @@ impl RenderOnce for MaterialBottomSheet {
             .when(modal, |sheet| {
                 sheet
                     .role(Role::Dialog)
+                    .when(open, |sheet| {
+                        sheet.a11y_synthetic_children(|builder| {
+                            builder.parent_node().set_modal();
+                        })
+                    })
                     .when_some(self.label, |sheet, label| sheet.aria_label(label))
             })
             .absolute()
