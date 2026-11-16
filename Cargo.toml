@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/color", "crates/material", "crates/gallery", "crates/gallery-web", "crates/bench"]
-exclude = ["vendor/gpui-kit", "vendor/gpui-pre", "vendor/gpui-pre-web", "vendor/gpui-pre-apple", "vendor/gpui-fast", "vendor/gpui-fast-apple"]
+exclude = ["vendor/gpui-kit", "vendor/gpui-pre", "vendor/gpui-pre-web", "vendor/gpui-pre-apple", "vendor/gpui-fast", "vendor/gpui-fast-apple", "vendor/accesskit-macos"]
 
 [workspace.package]
 version = "0.1.4"
@@ -43,6 +43,7 @@ lto = "fat"
 codegen-units = 1
 
 [patch.crates-io]
+accesskit_macos = { path = "vendor/accesskit-macos" }
 # Kit 0.9.1's source with a manifest that keeps WASM single-threaded by default
 # (vendor/gpui-kit/SOURCE.md); Symbols' `gpui-kit` is this one too.
 gpui-kit = { path = "vendor/gpui-kit" }
