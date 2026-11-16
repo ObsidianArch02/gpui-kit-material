@@ -145,18 +145,20 @@ implicitly.
 ## Engine patches
 
 One GPUI and one Base implementation are shared across Material, Kit and
-Symbols. The library depends on released crates only: `gpui-kit` and `gpui-base` 0.9.1,
-which name `gpui-fast` 0.1.14 or later (the workspace resolves 0.1.15) and `gpui-pre` 0.3.12; Symbols depends on crates.io
-`gpui-kit` 0.9 too, so a consumer resolves one Kit and its `IconNamed` is Material's.
-The root `[patch.crates-io]` table redirects a few of those crates to `vendor/` for this
-workspace's Gallery. **These patches apply only inside this workspace**, and none is
-needed to build the library (`scripts/check-registry-consumer.sh` builds the package
-without them). A patched Zed checkout overriding `gpui-pre` overrides it for this kit
-too.
+Symbols. The library declares released crates (`gpui-kit` and `gpui-base` 0.9.1,
+which select `gpui-fast` 0.1.14 or later, resolved to 0.1.15 in this workspace, and
+`gpui-pre` 0.3.12); Symbols depends on crates.io `gpui-kit` 0.9 too, so a consumer
+resolves one Kit and its `IconNamed` is Material's.
+The root `[patch.crates-io]` table redirects the patched crates below to `vendor/` for
+this workspace. Once upstream AccessKit and Longbridge GPUI Kit accept and release the
+accessibility additions below, drop the temporary kit/accessibility patches and restore
+pure registry readiness (`scripts/check-registry-consumer.sh`). A patched Zed checkout
+overriding `gpui-pre` overrides it for this kit too.
 
 ### Consumer patch set
 
-A downstream workspace that wants the Gallery's engine behavior patches `gpui-kit`,
+A downstream workspace that wants the Gallery's engine behavior and full accessibility
+support patches `gpui-base`, `gpui-component`, `accesskit_macos`, `gpui-kit`,
 `gpui-pre`, `gpui-pre-apple`, `gpui-pre-web` and `gpui-fast` from this repository at
 one revision:
 
@@ -166,6 +168,9 @@ gpui-kit = "0.9.1"
 gpui-kit-material = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "403dae86156a83a5e0e077523ccf8f094b49f5bb" }
 
 [patch.crates-io]
+gpui-base = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "403dae86156a83a5e0e077523ccf8f094b49f5bb" }
+gpui-component = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "403dae86156a83a5e0e077523ccf8f094b49f5bb" }
+accesskit_macos = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "403dae86156a83a5e0e077523ccf8f094b49f5bb" }
 gpui-kit = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "403dae86156a83a5e0e077523ccf8f094b49f5bb" }
 gpui-pre = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "403dae86156a83a5e0e077523ccf8f094b49f5bb" }
 gpui-pre-apple = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "403dae86156a83a5e0e077523ccf8f094b49f5bb" }
@@ -174,40 +179,45 @@ gpui-fast = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "403
 ```
 
 `[patch]` is read only from the top-level manifest, so it goes in your workspace root.
-The revision shown is `gpui-kit-material` 0.1.3's source; its engine patches add, to
-those that moved to Kit 0.9.1 (`98c72b8`), the nested scroll containers' wheel on
-`gpui-fast`. CI does not build that revision
-again, and `scripts/check-package.sh` checks that this block differs from the template CI
-builds (`scripts/git-consumer/Cargo.toml.in`) only in its revision.
+The revision placeholder above is replaced on release; `scripts/check-package.sh` checks
+that this block differs from the template CI builds
+(`scripts/git-consumer/Cargo.toml.in`) only in its revision.
 
 CI builds that
 manifest from Git at the pushed commit (`scripts/check-git-consumer.sh`) on every target,
-and [crates/consumer-check/Cargo.toml](../crates/consumer-check/Cargo.toml), the same
+and [crates/consumer-check/Cargo.toml](../crates/consumer-check/Cargo.toml) checks the same
 patches from this checkout, on every target and both backends, beside upstream's
-`gpui-fps`. Every patch changes behavior only: Material calls no engine API that the
-releases lack.
+`gpui-fps`. Engine patches remain scoped to behavior and the small accessibility
+subtree/initial-capture helpers (`Window::set_a11y_focus_handle`,
+`A11ySubtreeBuilder` helpers) until upstream merges them.
 
 | Consumer crate | Why a consumer may want it |
 | --- | --- |
+| `gpui-base` | Patched 0.9.1 adding `Dialog::modal`, `focus_trap_containing`, editor description/invalid state, and readable document text geometry/selection accessibility (`vendor/gpui-base/SOURCE.md`). Temporary until Longbridge GPUI Kit releases these APIs upstream. |
+| `gpui-component` | Patched 0.9.1 forwarding `aria_description` and `aria_invalid` on `Input` and `Textarea` (`vendor/gpui-component/SOURCE.md`). Temporary until Longbridge GPUI Kit releases these APIs upstream. |
+| `accesskit_macos` | Patched 0.26.3 exposing native macOS outline states, expansion actions, modal hiding, and checked text ranges (`vendor/accesskit-macos/SOURCE.md`). Temporary until AccessKit releases them upstream. |
 | `gpui-kit` | Kit 0.9.1's unchanged source with a normalized manifest that keeps WASM single-threaded by default (`multithreaded-web` restores upstream's workers); published Kit selects its Web platforms' default `multithreaded` feature. |
-| `gpui-pre`, `gpui-fast` | Spaces that overflow a wrapped row hang instead of starting the next one (upstream lacks this). On `gpui-pre`, a `measure_all` list measures its off-screen items over later frames after a width change, so a long `TextView` resizes without laying out every block per frame (gpui-fast 0.1.15 has it upstream). On `gpui-fast`, a wheel over nested scroll containers scrolls only the innermost one it moves, for the whole gesture, instead of every container under the pointer. `gpui-pre` also keeps the lazy tab-stop index and `em` metrics for fonts without `m`, which gpui-fast 0.1.14 has upstream. |
+| `gpui-pre`, `gpui-fast` | Spaces that overflow a wrapped row hang instead of starting the next one (upstream lacks this); initial accessibility tree capture on activation plus `Window::set_a11y_focus_handle` and `A11ySubtreeBuilder` helpers (`vendor/gpui-pre/a11y-subtree-patch.md`, `vendor/gpui-fast/MATERIAL-PATCHES.md`). On `gpui-pre`, a `measure_all` list measures its off-screen items over later frames after a width change, so a long `TextView` resizes without laying out every block per frame (gpui-fast 0.1.15 has it upstream). On `gpui-fast`, a wheel over nested scroll containers scrolls only the innermost one it moves, for the whole gesture, instead of every container under the pointer. `gpui-pre` also keeps the lazy tab-stop index and `em` metrics for fonts without `m`, which gpui-fast 0.1.14 has upstream. |
 | `gpui-pre-apple` | Non-Latin and app-private fallback fonts, and `sbix` color fonts drawn as color bitmaps, on the upstream backend; gpui-fast 0.1.14 has them upstream. |
 | `gpui-pre-web` | The browser's IME panel opens at the caret, and a key or edit the IME owns stays whole, on the upstream backend; gpui-fast 0.1.14 has them upstream. Only matters on `wasm32`. |
 
 The other gpui-fast crates (`-apple` apart, below, `-macos`, `-linux`, `-windows`,
 `-wgpu`, `-web`, `-platform`, `-macros`) and the upstream backend's platform crates come
-from crates.io unchanged. No vendored crate adds or changes engine API: gpui-fast takes
-no API additions, so the dev-only frame observation the Gallery's FPS counter, vsync
-switch and old profiler used was dropped. `crates/consumer-check` builds the library
-beside upstream's `gpui-fps`; so does this workspace.
+from crates.io unchanged. No other vendored crate adds engine API; only the accessibility
+subtree/focus helpers in `gpui-pre`/`gpui-fast` and the temporary Kit/AccessKit patches
+extend the API surface until upstream releases them. `crates/consumer-check` builds the
+library beside upstream's `gpui-fps`; so does this workspace.
 
 | Vendored | Source | Why |
 | --- | --- | --- |
+| `gpui-base` | crates.io 0.9.1 + patches (`SOURCE.md`) | Editor description/invalid metadata, `Dialog::modal`, `focus_trap_containing`, and readable document text accessibility (`src/text/*`). Temporary until upstream release. |
+| `gpui-component` | crates.io 0.9.1 + patches (`SOURCE.md`) | Passes `aria_description` and `aria_invalid` through `Input` and `Textarea`. Temporary until upstream release. |
+| `accesskit_macos` | crates.io 0.26.3 + patches (`SOURCE.md`) | Native macOS outline states, expansion actions, modal background hiding, and bounded text range conversion. Temporary until upstream release. |
 | `gpui-kit` | crates.io 0.9.1 (tag `v0.9.1`, `39ab849a`), unchanged source | Normalized manifest disables implicit WASM threading (`multithreaded-web` restores it). Hashes in `SOURCE.md`/`SOURCE.json`. |
-| `gpui-pre` (GPUI `=0.3.12`) | crates.io + patches (`SOURCE.json`, `*-patch.md`) | `em`/`ch` metrics for fonts without `m` (`em-fallback-patch.md`); lazy tab-stop index (`tab-stop-index-patch.md`); overflowing spaces hang instead of starting a wrapped row (`hanging-space-patch.md`); a width change lays out a `measure_all` list's shown items first and the rest over later frames (`list-width-remeasure-patch.md`); test-harness repairs; `try_update` for the deprecated `fetch_update` in the profiler. |
+| `gpui-pre` (GPUI `=0.3.12`) | crates.io + patches (`SOURCE.json`, `*-patch.md`) | `em`/`ch` metrics for fonts without `m` (`em-fallback-patch.md`); lazy tab-stop index (`tab-stop-index-patch.md`); overflowing spaces hang instead of starting a wrapped row (`hanging-space-patch.md`); a width change lays out a `measure_all` list's shown items first and the rest over later frames (`list-width-remeasure-patch.md`); initial accessibility tree capture and subtree helpers (`a11y-subtree-patch.md`); test-harness repairs; `try_update` for the deprecated `fetch_update` in the profiler. |
 | `gpui-pre-apple` | crates.io 0.3.12 + patches (`SOURCE.json`, `VENDORED.md`) | Non-Latin and app-private fallback fonts; `sbix` color fonts. |
 | `gpui-pre-web` | crates.io 0.3.12 + patches (`SOURCE.json`, `MATERIAL-PATCHES.md`) | Moves the hidden IME input to the caret when a composition starts and on `update_ime_position`, where a browser opens its candidate window and it takes no clicks; keeps a composition's keys from GPUI and a replaced emoji whole. |
-| `gpui-fast` | crates.io 0.1.15 + patches (`SOURCE.json`, `MATERIAL-PATCHES.md`), recorded by `scripts/vendor-gpui-fast.py --published 0.1.15` | Material's earlier Fast PRs are released in 0.1.14 and 0.1.15: wheel at its limit (#104), hover freeze for listeners (#105), released entities in a spliced view (#106), web IME (#108, #109, #110), macOS fonts (#111, #112), lazy tab stops (#113), `record_entities_accessed` (#114), `em` metrics (#115), `sbix` color fonts (#119), a `measure_all` list's measurement after a width change (#129). Local: hanging overflow spaces (`src/text_system/line_layout.rs`, `line_wrapper.rs`), a wheel scrolls only the innermost nested scroll container it moves and stays with it for the gesture (`src/fast/layers/wheel_latch.rs`), test-harness repairs, `try_update` for the deprecated `fetch_update`. |
+| `gpui-fast` | crates.io 0.1.15 + patches (`SOURCE.json`, `MATERIAL-PATCHES.md`), recorded by `scripts/vendor-gpui-fast.py --published 0.1.15` | Material's earlier Fast PRs are released in 0.1.14 and 0.1.15: wheel at its limit (#104), hover freeze for listeners (#105), released entities in a spliced view (#106), web IME (#108, #109, #110), macOS fonts (#111, #112), lazy tab stops (#113), `record_entities_accessed` (#114), `em` metrics (#115), `sbix` color fonts (#119), a `measure_all` list's measurement after a width change (#129). Local: hanging overflow spaces (`src/text_system/line_layout.rs`, `line_wrapper.rs`), a wheel scrolls only the innermost nested scroll container it moves and stays with it for the gesture (`src/fast/layers/wheel_latch.rs`), initial accessibility tree capture and subtree helpers (`src/window.rs`, `src/window/a11y.rs`, `src/fast/a11y.rs`), test-harness repairs, `try_update` for the deprecated `fetch_update`. |
 | `gpui-fast-apple` | crates.io 0.1.15 + a test (`SOURCE.json`, `MATERIAL-PATCHES.md`) | Workspace only, no runtime change: the `font_fallback` regression test with the Gallery's fonts, and a warning fix. Not in the consumer set. |
 
 **Replaced by Material code.** No engine patch remains for these:

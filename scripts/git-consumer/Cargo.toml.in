@@ -9,6 +9,9 @@ gpui-kit = "0.9.1"
 gpui-kit-material = { git = "@REPO@", rev = "@REV@" }
 
 [patch.crates-io]
+gpui-base = { git = "@REPO@", rev = "@REV@" }
+gpui-component = { git = "@REPO@", rev = "@REV@" }
+accesskit_macos = { git = "@REPO@", rev = "@REV@" }
 gpui-kit = { git = "@REPO@", rev = "@REV@" }
 gpui-pre = { git = "@REPO@", rev = "@REV@" }
 gpui-pre-apple = { git = "@REPO@", rev = "@REV@" }

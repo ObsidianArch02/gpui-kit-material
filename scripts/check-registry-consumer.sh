@@ -9,9 +9,10 @@
 #       [--kit-git <Kit commit>] [--target <triple>] [--command check|build]
 #
 # Without --kit-git the package builds against released crates only: it passes
-# once Kit has released everything the library calls (docs/RELEASING.md).
-# --kit-git previews the next Kit release: crates.io `gpui-kit` and `gpui-base`
-# come from Kit's Git at that commit, and nothing else is patched.
+# once Kit has released everything the library calls (docs/RELEASING.md), including
+# any accessibility APIs currently carried in the consumer patch set.
+# --kit-git previews the next Kit release: crates.io `gpui-kit`, `gpui-base` and
+# `gpui-component` come from Kit's Git at that commit, and nothing else is patched.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -55,13 +56,13 @@ rm -f "$package/Cargo.lock"
 printf '\n[workspace]\n' >>"$manifest"
 if [ -n "$kit_git" ]; then
     kit="{ git = \"https://github.com/longbridge/gpui-kit\", rev = \"$kit_git\" }"
-    printf '\n[patch.crates-io]\ngpui-kit = %s\ngpui-base = %s\n' "$kit" "$kit" >>"$manifest"
+    printf '\n[patch.crates-io]\ngpui-kit = %s\ngpui-base = %s\ngpui-component = %s\n' "$kit" "$kit" "$kit" >>"$manifest"
 fi
 
 cargo generate-lockfile --manifest-path "$manifest"
-# One Kit and one Base, and from Git when previewing: a patch whose version no
+# One Kit, Base and Component, and from Git when previewing: a patch whose version no
 # longer meets the requirement is silently unused.
-for name in gpui-kit gpui-base; do
+for name in gpui-kit gpui-base gpui-component; do
     sources=$(awk -v name="$name" '$0 == "name = \"" name "\"" { getline; getline; print }' "$package/Cargo.lock")
     if [ "$(grep -c . <<<"$sources")" != 1 ]; then
         echo "expected one $name in the lockfile, found:" >&2

@@ -43,8 +43,8 @@ if [ -n "$from_kit_git" ]; then
     echo "$from_kit_git" >&2
     exit 1
 fi
-# One Kit, Base and engine: the registry's and the patch's must be one package.
-for package in gpui-base gpui-kit gpui-pre gpui-fast; do
+# One Kit, Base, Component, AccessKit and engine: the registry's and the patch's must be one package.
+for package in gpui-base gpui-component gpui-kit gpui-pre gpui-fast accesskit_macos; do
     count=$(grep -cF "name = \"$package\"" "$dir/Cargo.lock" || true)
     if [ "$count" != 1 ]; then
         echo "expected one $package in the lockfile, found $count" >&2
