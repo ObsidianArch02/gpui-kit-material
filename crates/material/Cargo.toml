@@ -22,7 +22,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 default = ["full", "serde", "embedded-symbols", "gpui-fast"]
 embedded-symbols = ["gpui-material-symbols/embed-assets"]
 serde = ["gpui-kit-material-color/serde"]
-gpui-fast = ["gpui-kit/gpui-fast"]
+gpui-fast = ["gpui-kit/gpui-fast", "dep:gpui-fast"]
 
 # Every group below. Backend, symbols and serde stay separate choices.
 full = [
@@ -80,6 +80,9 @@ gpui-kit-material-color.workspace = true
 gpui-kit.workspace = true
 gpui-material-symbols = { version = "0.1", default-features = false, features = ["gpui-kit"] }
 gpui-base.workspace = true
+# Constrain gpui-fast while on gpui-kit 0.9.1: gpui-base 0.9.1 specifies `^0.1.14`, and
+# gpui-fast 0.1.16 added a blanket `IntoElement` impl that conflicts with gpui-base 0.9.1.
+gpui-fast = { version = "=0.1.15", default-features = false, optional = true }
 # Already in Cargo.lock through GPUI Base's calendar; the pickers share its date types.
 chrono = { version = "0.4.38", default-features = false, features = ["clock"], optional = true }
 
