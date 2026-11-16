@@ -195,6 +195,24 @@ fn list_paint(selected: bool, disabled: bool) -> ListPaint {
 }
 
 type Click = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+type ExpandedChange = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
+
+fn with_expansion_actions<E: StatefulInteractiveElement>(
+    element: E,
+    on_change: Option<ExpandedChange>,
+) -> E {
+    let Some(on_change) = on_change else {
+        return element;
+    };
+    let on_expand = on_change.clone();
+    element
+        .on_a11y_action(gpui::accesskit::Action::Expand, move |_, window, cx| {
+            on_expand(&true, window, cx)
+        })
+        .on_a11y_action(gpui::accesskit::Action::Collapse, move |_, window, cx| {
+            on_change(&false, window, cx)
+        })
+}
 
 /// One M3 list item. Strings come from the caller. Give it `on_click` to make
 /// the whole row a button; without one it is static content.
@@ -228,7 +246,7 @@ pub struct ListItem {
     trailing: ListTrailing,
     divider: bool,
     divider_inset: bool,
-    selected: bool,
+    selected: Option<bool>,
     disabled: bool,
     switch_icons: SwitchIcons,
     density: ListDensity,
@@ -238,6 +256,12 @@ pub struct ListItem {
     container: ColorRole,
     preview: Option<InteractionPreview>,
     on_click: Option<Click>,
+    on_expanded_change: Option<ExpandedChange>,
+    role: Option<Role>,
+    expanded: Option<bool>,
+    level: Option<usize>,
+    position_in_set: Option<usize>,
+    size_of_set: Option<usize>,
 }
 
 impl ListItem {
@@ -253,7 +277,7 @@ impl ListItem {
             trailing: ListTrailing::None,
             divider: false,
             divider_inset: false,
-            selected: false,
+            selected: None,
             disabled: false,
             switch_icons: SwitchIcons::None,
             density: ListDensity::Standard,
@@ -263,7 +287,45 @@ impl ListItem {
             container: ColorRole::SURFACE,
             preview: None,
             on_click: None,
+            on_expanded_change: None,
+            role: None,
+            expanded: None,
+            level: None,
+            position_in_set: None,
+            size_of_set: None,
         }
+    }
+    /// Override the row role. Static rows default to `ListItem`, clickable rows to `Button`.
+    pub fn role(mut self, role: Role) -> Self {
+        self.role = Some(role);
+        self
+    }
+    /// Report whether the row's child content is expanded.
+    pub fn aria_expanded(mut self, expanded: bool) -> Self {
+        self.expanded = Some(expanded);
+        self
+    }
+    pub fn on_expanded_change(
+        mut self,
+        on_change: impl Fn(&bool, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_expanded_change = Some(Rc::new(on_change));
+        self
+    }
+    /// Report the row's one-based hierarchy level.
+    pub fn aria_level(mut self, level: usize) -> Self {
+        self.level = Some(level);
+        self
+    }
+    /// Report the row's one-based position in its sibling set.
+    pub fn aria_position_in_set(mut self, position: usize) -> Self {
+        self.position_in_set = Some(position);
+        self
+    }
+    /// Report the number of rows in the sibling set.
+    pub fn aria_size_of_set(mut self, size: usize) -> Self {
+        self.size_of_set = Some(size);
+        self
     }
     /// The handle icons of a leading or trailing switch.
     pub fn switch_icons(mut self, icons: SwitchIcons) -> Self {
@@ -309,8 +371,10 @@ impl ListItem {
         self.divider_inset = inset;
         self
     }
+    /// Mark the row as selectable and report its selection state.
+    /// Without this call, only radio rows report selection.
     pub fn selected(mut self, selected: bool) -> Self {
-        self.selected = selected;
+        self.selected = Some(selected);
         self
     }
     pub fn disabled(mut self, disabled: bool) -> Self {
@@ -442,7 +506,7 @@ fn control(
     icons: SwitchIcons,
 ) -> AnyElement {
     let preview = control_preview(disabled);
-    match kind {
+    let wrapped = match kind {
         Control::Checkbox => control_slot(
             24.,
             MaterialCheckbox::new(id, label.clone())
@@ -470,7 +534,16 @@ fn control(
                     .preview_state(preview),
             )
             .into_any_element(),
-    }
+    };
+    div()
+        .id((ElementId::from(id), "hidden"))
+        .flex_shrink_0()
+        .role(Role::Group)
+        .a11y_synthetic_children(|builder| {
+            builder.parent_node().set_hidden();
+        })
+        .child(wrapped)
+        .into_any_element()
 }
 
 /// A placeholder or caller thumbnail of `width`×`height` dp.
@@ -519,7 +592,7 @@ impl ListItem {
                 .child(icon.size(rem(size)).color(ink))
                 .into_any_element(),
             ListLeading::Tinted(icon, tint, size) => tinted_icon(icon, tint, rem(size))
-                .when(self.selected && !disabled, |circle| {
+                .when(self.selected.unwrap_or(false) && !disabled, |circle| {
                     circle.bg(color(ColorRole::SURFACE))
                 })
                 .when(disabled, |circle| circle.opacity(state::DISABLED_CONTENT))
@@ -585,16 +658,17 @@ impl ListItem {
 impl ListItem {
     /// The row's toggle for assistive technology: a checkbox or switch is
     /// toggled; a radio is announced through the selected state.
-    fn toggle_state(&self) -> (Option<bool>, bool) {
+    fn toggle_state(&self) -> (Option<bool>, Option<bool>) {
         let toggled = match (&self.leading, &self.trailing) {
             (ListLeading::Checkbox(on) | ListLeading::Switch(on), _)
             | (_, ListTrailing::Checkbox(on) | ListTrailing::Switch(on)) => Some(*on),
             _ => None,
         };
-        let radio = matches!(
-            (&self.leading, &self.trailing),
-            (ListLeading::Radio(true), _) | (_, ListTrailing::Radio(true))
-        );
+        let radio = match (&self.leading, &self.trailing) {
+            (ListLeading::Radio(true), _) | (_, ListTrailing::Radio(true)) => Some(true),
+            (ListLeading::Radio(false), _) | (_, ListTrailing::Radio(false)) => Some(false),
+            _ => None,
+        };
         (toggled, radio)
     }
 }
@@ -607,13 +681,36 @@ impl RenderOnce for ListItem {
         let disabled = self.disabled || preview.is_some_and(InteractionPreview::is_disabled);
         let lines = self.lines();
         let (min_height, pad_y) = row_metrics(lines, self.density);
-        let mut paint = list_paint(self.selected, disabled);
-        if !self.selected {
+        let paint_selected = self.selected.unwrap_or(false);
+        let mut paint = list_paint(paint_selected, disabled);
+        if !paint_selected {
             paint.container = color(self.container);
         }
         let (toggled, radio) = self.toggle_state();
-        let selected = self.selected || radio;
-        let description = self.supporting.clone();
+        let selected = self
+            .selected
+            .map(|selected| selected || radio.unwrap_or(false))
+            .or(radio);
+        let description: Vec<&str> = [
+            self.overline.as_deref(),
+            self.supporting.as_deref(),
+            self.trailing_text.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .filter(|text| !text.is_empty())
+        .collect();
+        let description =
+            (!description.is_empty()).then(|| SharedString::from(description.join("\n")));
+        let role = self.role;
+        let expanded = self.expanded;
+        let on_expanded_change = self
+            .on_expanded_change
+            .take()
+            .filter(|_| !disabled && expanded.is_some());
+        let level = self.level;
+        let position = self.position_in_set;
+        let size = self.size_of_set;
         let leading = self.leading_element(paint.support, disabled, icon_size);
         let trailing = self.trailing_element(paint.support, disabled, icon_size);
         let top_aligned = lines == ListLines::Three;
@@ -702,7 +799,7 @@ impl RenderOnce for ListItem {
                 // Selection morphs the corners, as a press does below.
                 let amount = motion::selection_value(
                     (self.id.clone(), "list-corners"),
-                    if self.selected { 1. } else { 0. },
+                    if paint_selected { 1. } else { 0. },
                     window,
                     cx,
                 );
@@ -739,6 +836,25 @@ impl RenderOnce for ListItem {
             let layer = preview.map(|p| p.layer_opacity()).unwrap_or(0.);
             return decorate(div())
                 .id(self.id)
+                .role(role.unwrap_or(Role::ListItem))
+                .aria_label(self.headline)
+                .when_some(selected, |item, value| item.aria_selected(value))
+                .when_some(toggled, |item, on| {
+                    item.aria_toggled(if on {
+                        gpui::accesskit::Toggled::True
+                    } else {
+                        gpui::accesskit::Toggled::False
+                    })
+                })
+                .when_some(description, |item, text| item.aria_description(text))
+                .when_some(expanded, |item, value| item.aria_expanded(value))
+                .map(|item| with_expansion_actions(item, on_expanded_change))
+                .when_some(level, |item, value| item.aria_level(value))
+                .when_some(position, |item, value| item.aria_position_in_set(value))
+                .when_some(size, |item, value| item.aria_size_of_set(value))
+                .when(disabled, |item| {
+                    item.a11y_synthetic_children(|builder| builder.parent_node().set_disabled())
+                })
                 .when(layer > 0. && !disabled, |item| {
                     item.bg(state::layer(container, paint.layer, layer))
                 })
@@ -784,7 +900,8 @@ impl RenderOnce for ListItem {
             // headline.
             .map(|button| {
                 button
-                    .aria_selected(selected)
+                    .when_some(role, |button, role| button.role(role))
+                    .when_some(selected, |button, value| button.aria_selected(value))
                     .when_some(toggled, |button, on| {
                         button.aria_toggled(if on {
                             gpui::accesskit::Toggled::True
@@ -793,6 +910,11 @@ impl RenderOnce for ListItem {
                         })
                     })
                     .when_some(description, |button, text| button.aria_description(text))
+                    .when_some(expanded, |button, value| button.aria_expanded(value))
+                    .map(|button| with_expansion_actions(button, on_expanded_change))
+                    .when_some(level, |button, value| button.aria_level(value))
+                    .when_some(position, |button, value| button.aria_position_in_set(value))
+                    .when_some(size, |button, value| button.aria_size_of_set(value))
             })
             .state_layers(hover, press)
             .active_radius(active_radius)
