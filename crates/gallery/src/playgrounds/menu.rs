@@ -328,19 +328,7 @@ fn preview(
         .debug_selector(|| "menu-trigger".into())
         .variant(ButtonVariant::Tonal)
         .accessibility_label(label.clone())
-        .child(label)
-        .on_click({
-            let state = state.clone();
-            move |event, _, cx| {
-                // Pointer presses reach the popover; keys arrive here.
-                if matches!(event, ClickEvent::Keyboard(_)) {
-                    state.update(cx, |state, cx| {
-                        state.open = !state.open;
-                        cx.notify();
-                    })
-                }
-            }
-        });
+        .child(label);
     let mut popup = MenuPopup::new("playground-menu-popup", trigger, menu)
         .open(open)
         .anchor(anchor(config.option("position")))

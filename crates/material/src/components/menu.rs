@@ -1274,15 +1274,7 @@ impl RenderOnce for Trigger {
 ///
 /// impl Render for Editor {
 ///     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-///         let button = material_button("format", ButtonVariant::Tonal).child("Format").on_click(
-///             // Pointer presses reach the popup; keys arrive here.
-///             cx.listener(|this, event: &ClickEvent, _, cx| {
-///                 if matches!(event, ClickEvent::Keyboard(_)) {
-///                     this.menu_open = !this.menu_open;
-///                     cx.notify();
-///                 }
-///             }),
-///         );
+///         let button = material_button("format", ButtonVariant::Tonal).child("Format");
 ///         let menu = MaterialMenu::new("format-menu")
 ///             .items([MaterialMenuItem::new("Bold"), MaterialMenuItem::new("Italic")]);
 ///         MenuPopup::new("format-popup", button, menu)
@@ -1810,9 +1802,18 @@ impl RenderOnce for MenuPopup {
         .top_0()
         .left_0()
         .size_full();
+        let key_toggle = self.on_open_change.clone();
         let trigger = div()
+            .id((self.id.clone(), "trigger"))
             .relative()
             .when(full_width, |trigger| trigger.w_full())
+            .on_click(move |event, window, cx| {
+                if matches!(event, ClickEvent::Keyboard(_))
+                    && let Some(toggle) = key_toggle.as_ref()
+                {
+                    toggle(&!open, window, cx);
+                }
+            })
             .child(self.trigger)
             .child(super::prepaint_bounds(press, move |bounds, window, _| {
                 let design = |pixels: Pixels| {
