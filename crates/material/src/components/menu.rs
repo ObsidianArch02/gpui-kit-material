@@ -2612,6 +2612,9 @@ impl RenderOnce for ExposedDropdown {
         let open_down = toggle.clone();
         let open_up = toggle.clone();
         let confirm = toggle.clone();
+        let ax_click = toggle.clone();
+        let ax_expand = toggle.clone();
+        let ax_collapse = toggle.clone();
         let trigger = div()
             .id((id.clone(), "trigger"))
             .debug_selector(|| "dropdown-trigger".into())
@@ -2621,8 +2624,23 @@ impl RenderOnce for ExposedDropdown {
             .aria_value(value.clone())
             .aria_expanded(open)
             .key_context(DROPDOWN_CONTEXT)
-            .when(!self.disabled, |this| this.track_focus(&focus))
-            .when(!self.disabled, |this| this.cursor_pointer())
+            .when(!self.disabled, |this| {
+                this.track_focus(&focus)
+                    .cursor_pointer()
+                    .on_a11y_action(AccessibleAction::Click, move |_, window, cx| {
+                        ax_click(!open, window, cx)
+                    })
+                    .on_a11y_action(AccessibleAction::Expand, move |_, window, cx| {
+                        if !open {
+                            ax_expand(true, window, cx);
+                        }
+                    })
+                    .on_a11y_action(AccessibleAction::Collapse, move |_, window, cx| {
+                        if open {
+                            ax_collapse(false, window, cx);
+                        }
+                    })
+            })
             .on_action(move |_: &SelectDown, window, cx| {
                 if !open {
                     open_down(true, window, cx)

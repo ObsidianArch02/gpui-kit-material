@@ -626,6 +626,7 @@ pub struct MaterialButton {
     focusable: bool,
     base: BaseControl,
     children: Vec<AnyElement>,
+    text_label: Option<SharedString>,
     icon: Option<Icon>,
     icon_position: ButtonIconPosition,
     variant: ButtonVariant,
@@ -666,6 +667,7 @@ impl MaterialButton {
             focusable: true,
             base: BaseControl::new(id).block_mouse_except_scroll(),
             children: vec![],
+            text_label: None,
             icon: None,
             icon_position: ButtonIconPosition::Leading,
             selector: None,
@@ -895,7 +897,20 @@ impl Styled for MaterialButton {
 }
 impl ParentElement for MaterialButton {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
+        for mut element in elements {
+            let text = element.downcast_mut::<SharedString>().cloned().or_else(|| {
+                element
+                    .downcast_mut::<&'static str>()
+                    .map(|text| SharedString::new_static(text))
+            });
+            if let Some(text) = text.filter(|text| !text.trim().is_empty()) {
+                self.text_label = Some(match self.text_label.take() {
+                    Some(previous) => format!("{previous} {text}").into(),
+                    None => text,
+                });
+            }
+            self.children.push(element);
+        }
     }
 }
 impl InteractiveElement for MaterialButton {
@@ -1436,7 +1451,13 @@ impl RenderOnce for MaterialButton {
         }
         self.record_transition_inputs(cx);
         // `disabled()` already set Base; loading additionally disables it.
-        self.base = self.base.disabled(self.disabled).busy(loading);
+        self.base = self
+            .base
+            .when_some(self.text_label.take(), |base, label| {
+                base.default_accessibility_label(label)
+            })
+            .disabled(self.disabled)
+            .busy(loading);
         let pressed = press_state(self.id.clone(), self.focus_handle.as_ref(), window, cx);
         if self.transition_playback.is_none() {
             self.transition_playback = Some(pressed.read(cx).own_transitions.clone());

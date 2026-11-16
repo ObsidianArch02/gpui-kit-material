@@ -64,6 +64,14 @@ impl BaseControl {
         self.label = Some(value.into());
         self
     }
+    pub(super) fn default_accessibility_label(mut self, value: SharedString) -> Self {
+        let mut supplied = accesskit::Node::new(Role::Button);
+        self.interaction.write_a11y_info(&mut supplied);
+        if self.label.is_none() && supplied.label().is_none() {
+            self.label = Some(value);
+        }
+        self
+    }
     pub fn track_focus(mut self, value: &FocusHandle) -> Self {
         self.focus = Some(value.clone());
         self
