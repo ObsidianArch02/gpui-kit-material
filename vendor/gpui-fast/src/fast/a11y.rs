@@ -140,6 +140,17 @@ pub(crate) struct A11yLog {
 }
 
 impl A11yLog {
+    pub(crate) fn preserve_children(log: &mut Self, at: usize) {
+        for op in log.ops.iter_mut().rev() {
+            if let Op::Pop(index, preserve) = op
+                && *index == at
+            {
+                *preserve = true;
+                break;
+            }
+        }
+    }
+
     #[inline]
     pub(crate) fn push(log: &mut Self, id: NodeId) {
         if log.recording {
