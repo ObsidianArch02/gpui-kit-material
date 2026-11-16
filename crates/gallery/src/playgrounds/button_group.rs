@@ -82,7 +82,7 @@ pub static PLAYGROUND: Playground = Playground {
                 Control::Select {
                     id: "tone",
                     label: "Tone",
-                    options: &["standard", "neutral", "accent"],
+                    options: &["standard", "neutral", "accent", "danger"],
                     default: 0,
                 },
                 Control::Segmented {
@@ -392,7 +392,7 @@ fn preview(
 
 /// The Rust names of the Variant, Tone, Size and Density options.
 const VARIANT_NAMES: [&str; 5] = ["Filled", "Tonal", "Outlined", "Elevated", "Text"];
-const TONE_NAMES: [&str; 3] = ["Standard", "Neutral", "Accent"];
+const TONE_NAMES: [&str; 4] = ["Standard", "Neutral", "Accent", "Danger"];
 const SIZE_NAMES: [&str; 5] = ["ExtraSmall", "Small", "Medium", "Large", "ExtraLarge"];
 const DENSITY_NAMES: [&str; 3] = ["Default", "Comfortable", "Compact"];
 
