@@ -16,7 +16,7 @@
 use super::InteractionPreview;
 use super::caret_report::CaretReport;
 use super::labeled::required_label;
-use super::text::type_style;
+use super::text::{accessible_text, error_text, type_style};
 use crate::{
     color::ColorRole,
     motion::{self, MotionToken},
@@ -379,7 +379,7 @@ impl TextField {
         self
     }
     /// Supporting text below the field; with [`Self::error`] it is the
-    /// error message.
+    /// error message. The field group exposes it as its description.
     pub fn supporting_text(mut self, text: impl Into<SharedString>) -> Self {
         self.supporting = Some(text.into());
         self
@@ -389,6 +389,8 @@ impl TextField {
         self.max_length = Some(max);
         self
     }
+    /// Mark the field group invalid and expose its supporting text as an alert.
+    /// Kit does not expose an invalid-state setter for the editor node.
     pub fn error(mut self, error: bool) -> Self {
         self.error = error;
         self
@@ -995,6 +997,30 @@ impl RenderOnce for TextField {
             }
             name
         });
+        let counter = self
+            .max_length
+            .map(|max| SharedString::from(format!("{}/{max}", value.chars().count())));
+        let feedback: Vec<&str> = [self.supporting.as_deref(), counter.as_deref()]
+            .into_iter()
+            .flatten()
+            .filter(|text| !text.is_empty())
+            .collect();
+        let description = (!feedback.is_empty()).then(|| SharedString::from(feedback.join("\n")));
+        container = container.when(description.is_some() || self.error, |container| {
+            container
+                .role(Role::Group)
+                .when_some(name.clone(), |container, name| container.aria_label(name))
+                .when_some(description.clone(), |container, text| {
+                    container.aria_description(text)
+                })
+                .when(self.error, |container| {
+                    container.a11y_synthetic_children(|builder| {
+                        builder
+                            .parent_node()
+                            .set_invalid(gpui::accesskit::Invalid::True);
+                    })
+                })
+        });
         // Kit's input paints Kit's theme caret and selection; the field's caret
         // follows its error state, and both follow a scope Kit's theme does not.
         let caret = Hsla::from(active.caret);
@@ -1010,6 +1036,10 @@ impl RenderOnce for TextField {
                     .disabled(disabled)
                     .readonly(self.read_only)
                     .when_some(name.clone(), |this, label| this.aria_label(label))
+                    .when_some(description.clone(), |this, description| {
+                        this.aria_description(description)
+                    })
+                    .aria_invalid(self.error)
                     .p_0()
                     .h(rem(24.))
                     .text_size(TypeRole::BodyLarge.scale().font_size)
@@ -1026,6 +1056,10 @@ impl RenderOnce for TextField {
                     .disabled(disabled)
                     .readonly(self.read_only)
                     .when_some(name.clone(), |this, label| this.aria_label(label))
+                    .when_some(description.clone(), |this, description| {
+                        this.aria_description(description)
+                    })
+                    .aria_invalid(self.error)
                     .p_0()
                     // Kit insets multi-line text by the XSmall input padding.
                     .mx(px(-4.))
@@ -1157,9 +1191,6 @@ impl RenderOnce for TextField {
             );
         }
 
-        let counter = self
-            .max_length
-            .map(|max| SharedString::from(format!("{}/{max}", value.chars().count())));
         let supporting_row = (self.supporting.is_some() || counter.is_some()).then(|| {
             type_style(div(), TypeRole::BodySmall)
                 .flex()
@@ -1168,14 +1199,26 @@ impl RenderOnce for TextField {
                 .px(rem(if hero { HERO_PADDING_START } else { PADDING }))
                 .pt(rem(4.))
                 .text_color(rest.supporting)
-                .child(
-                    div()
-                        .debug_selector(|| "text-field-supporting".into())
-                        .min_w_0()
-                        .flex_1()
-                        .children(self.supporting.clone()),
-                )
-                .children(counter.map(|counter| div().flex_shrink_0().child(counter)))
+                .child({
+                    let supporting_id =
+                        ElementId::NamedChild(id.clone().into(), "supporting".into());
+                    match self.supporting.clone() {
+                        Some(message) if self.error => error_text(supporting_id, message),
+                        Some(message) => accessible_text(supporting_id, message),
+                        None => div().id(supporting_id),
+                    }
+                    .debug_selector(|| "text-field-supporting".into())
+                    .min_w_0()
+                    .flex_1()
+                    .text_color(rest.supporting)
+                })
+                .children(counter.map(|counter| {
+                    accessible_text(
+                        ElementId::NamedChild(id.clone().into(), "counter".into()),
+                        counter,
+                    )
+                    .flex_shrink_0()
+                }))
         });
 
         let mut outer = div()

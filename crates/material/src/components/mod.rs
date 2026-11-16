@@ -290,7 +290,7 @@ pub use stepper::{STEPPER_DOT_SIZE, Stepper};
 pub use tabs::{MaterialTabs, TabItem, TabsVariant};
 pub use text::{
     accessible_text, error_text, info_callout, page_heading, section_heading, section_title,
-    semantic_label, supporting_info,
+    semantic_label, status_text, supporting_info,
 };
 #[cfg(feature = "inputs")]
 pub use text_field::{

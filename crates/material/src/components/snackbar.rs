@@ -4,7 +4,6 @@
 //! <https://m3e.kyralabs.dev/components/snackbar/>.
 use super::InteractionPreview;
 use super::focus::{RingPlacement, RingedButton};
-use super::text::accessible_text;
 use crate::color::ColorRole::*;
 use crate::icons::IconName;
 use crate::motion::{self, MotionToken};
@@ -418,8 +417,7 @@ impl RenderOnce for Snackbar {
         let has_close = close.is_some();
         let has_buttons = action.is_some() || has_close;
         let body = TypeRole::BodyMedium.scale();
-        let message = accessible_text(child("message"), self.message)
-            .role(Role::Status)
+        let message = super::text::status_text(child("message"), self.message)
             .flex_1()
             .min_w_0()
             .py(rem(14.))

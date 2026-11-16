@@ -32,9 +32,53 @@ fn spoken(value: &SharedString) -> SharedString {
 /// Failure feedback as one accessible alert form. Callers chain their own
 /// size and wrapping.
 pub fn error_text(id: impl Into<ElementId>, message: impl Into<SharedString>) -> Stateful<Div> {
-    accessible_text(id, message)
-        .role(Role::Alert)
+    live_text(id, message, Role::Alert, accesskit::Live::Assertive)
         .text_color(color(ColorRole::ERROR))
+}
+
+/// Status feedback that announces changes after the current speech finishes.
+pub fn status_text(id: impl Into<ElementId>, message: impl Into<SharedString>) -> Stateful<Div> {
+    live_text(id, message, Role::Status, accesskit::Live::Polite)
+}
+
+fn live_text(
+    id: impl Into<ElementId>,
+    message: impl Into<SharedString>,
+    role: Role,
+    live: accesskit::Live,
+) -> Stateful<Div> {
+    let message = message.into();
+    let value = spoken(&message);
+    accessible_text(id, message)
+        .role(role)
+        .aria_value(value)
+        .a11y_synthetic_children(move |builder| {
+            let node = builder.parent_node();
+            node.set_live(live);
+            #[cfg(all(test, feature = "full", feature = "gpui-fast"))]
+            LIVE_TEXT_NODES.with_borrow_mut(|nodes| {
+                if let Some(nodes) = nodes {
+                    nodes.push(node.clone());
+                }
+            });
+        })
+}
+
+#[cfg(all(test, feature = "full", feature = "gpui-fast"))]
+thread_local! {
+    static LIVE_TEXT_NODES: std::cell::RefCell<Option<Vec<accesskit::Node>>> = const {
+        std::cell::RefCell::new(None)
+    };
+}
+
+#[cfg(all(test, feature = "full", feature = "gpui-fast"))]
+pub(super) fn observe_live_text_nodes() {
+    LIVE_TEXT_NODES.with_borrow_mut(|nodes| *nodes = Some(Vec::new()));
+}
+
+#[cfg(all(test, feature = "full", feature = "gpui-fast"))]
+pub(super) fn take_live_text_nodes() -> Vec<accesskit::Node> {
+    LIVE_TEXT_NODES.with_borrow_mut(|nodes| nodes.take().unwrap_or_default())
 }
 
 /// An icon column and a medium-weight text column. The slot also takes a
