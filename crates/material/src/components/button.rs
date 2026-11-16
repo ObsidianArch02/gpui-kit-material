@@ -178,15 +178,20 @@ pub enum ButtonTone {
     Neutral,
     /// Primary content; an outlined edge is the full outline role.
     Accent,
+    /// Error roles, for destructive actions: `ERROR`/`ON_ERROR` when filled,
+    /// `ERROR_CONTAINER`/`ON_ERROR_CONTAINER` when tonal, and `ERROR` content
+    /// (with an `ERROR` outline when outlined) otherwise.
+    Danger,
 }
 
 impl ButtonTone {
-    pub const ALL: [Self; 3] = [Self::Standard, Self::Neutral, Self::Accent];
+    pub const ALL: [Self; 4] = [Self::Standard, Self::Neutral, Self::Accent, Self::Danger];
     pub const fn name(self) -> &'static str {
         match self {
             Self::Standard => "Standard",
             Self::Neutral => "Neutral",
             Self::Accent => "Accent",
+            Self::Danger => "Danger",
         }
     }
 }
@@ -336,6 +341,16 @@ fn toned_color_targets(variant: ButtonVariant, tone: ButtonTone) -> (CssColor, C
     let standard = color_targets(variant, false);
     match (tone, variant) {
         (ButtonTone::Standard, _) | (ButtonTone::Accent, ButtonVariant::Filled) => standard,
+        (ButtonTone::Danger, ButtonVariant::Filled) => (
+            CssColor::role(C::ERROR),
+            CssColor::role(C::ON_ERROR),
+            CssColor::transparent(),
+        ),
+        (ButtonTone::Danger, ButtonVariant::Tonal) => (
+            CssColor::role(C::ERROR_CONTAINER),
+            CssColor::role(C::ON_ERROR_CONTAINER),
+            CssColor::transparent(),
+        ),
         (ButtonTone::Neutral, ButtonVariant::Filled | ButtonVariant::Tonal) => (
             CssColor::role(C::SURFACE_CONTAINER_HIGHEST),
             CssColor::role(C::ON_SURFACE),
@@ -343,21 +358,26 @@ fn toned_color_targets(variant: ButtonVariant, tone: ButtonTone) -> (CssColor, C
         ),
         (_, ButtonVariant::Outlined) => (
             CssColor::transparent(),
-            CssColor::role(if tone == ButtonTone::Neutral {
-                C::ON_SURFACE
-            } else {
-                C::PRIMARY
+            CssColor::role(match tone {
+                ButtonTone::Neutral => C::ON_SURFACE,
+                ButtonTone::Danger => C::ERROR,
+                ButtonTone::Standard | ButtonTone::Accent => C::PRIMARY,
             }),
-            CssColor::role(C::OUTLINE),
+            CssColor::role(if tone == ButtonTone::Danger {
+                C::ERROR
+            } else {
+                C::OUTLINE
+            }),
         ),
         (ButtonTone::Neutral, _) => (standard.0, CssColor::role(C::ON_SURFACE), standard.2),
         (ButtonTone::Accent, _) => (standard.0, CssColor::role(C::PRIMARY), standard.2),
+        (ButtonTone::Danger, _) => (standard.0, CssColor::role(C::ERROR), standard.2),
     }
 }
 
-/// An unselected toggle's enabled colors in `tone`. Accent is the filled button's own look,
-/// which for a toggle is its selected state, so an unselected one keeps the toggle's colors
-/// rather than read as selected.
+/// An unselected toggle's enabled colors in `tone`. Accent and Danger filled buttons use
+/// solid containers at rest, which for a toggle would read as selected, so an unselected
+/// filled toggle keeps the toggle's surface container instead.
 fn toned_toggle_targets(
     variant: ButtonVariant,
     tone: ButtonTone,
@@ -365,6 +385,10 @@ fn toned_toggle_targets(
     match (tone, variant) {
         (ButtonTone::Accent, ButtonVariant::Filled) => {
             toggle_color_targets(variant, false, true, false)
+        }
+        (ButtonTone::Danger, ButtonVariant::Filled) => {
+            let (bg, _, edge) = toggle_color_targets(variant, false, true, false);
+            (bg, CssColor::role(ColorRole::ERROR), edge)
         }
         _ => toned_color_targets(variant, tone),
     }
@@ -1695,6 +1719,29 @@ mod tests {
         assert_eq!(
             targets(ButtonVariant::Filled, ButtonTone::Accent).0,
             standard.0.resolve()
+        );
+        assert_eq!(
+            targets(ButtonVariant::Filled, ButtonTone::Danger),
+            (
+                role(C::ERROR),
+                role(C::ON_ERROR),
+                super::CssColor::transparent().resolve()
+            )
+        );
+        assert_eq!(
+            targets(ButtonVariant::Tonal, ButtonTone::Danger),
+            (
+                role(C::ERROR_CONTAINER),
+                role(C::ON_ERROR_CONTAINER),
+                super::CssColor::transparent().resolve()
+            )
+        );
+        let danger_outlined = targets(ButtonVariant::Outlined, ButtonTone::Danger);
+        assert_eq!(danger_outlined.1, role(C::ERROR));
+        assert_eq!(danger_outlined.2, role(C::ERROR));
+        assert_eq!(
+            targets(ButtonVariant::Text, ButtonTone::Danger).1,
+            role(C::ERROR)
         );
     }
 

@@ -68,7 +68,7 @@ pub static PLAYGROUND: Playground = Playground {
                 Control::Select {
                     id: "tone",
                     label: "Tone",
-                    options: &["standard", "neutral", "accent"],
+                    options: &["standard", "neutral", "accent", "danger"],
                     default: 0,
                 },
                 Control::Select {
@@ -200,7 +200,7 @@ fn preview(
 
 fn code(config: &Config) -> String {
     const VARIANT_NAMES: [&str; 4] = ["Standard", "Filled", "Tonal", "Outlined"];
-    const TONE_NAMES: [&str; 3] = ["Standard", "Neutral", "Accent"];
+    const TONE_NAMES: [&str; 4] = ["Standard", "Neutral", "Accent", "Danger"];
     const SIZE_NAMES: [&str; 5] = ["ExtraSmall", "Small", "Medium", "Large", "ExtraLarge"];
     const WIDTH_NAMES: [&str; 3] = ["Narrow", "Default", "Wide"];
     let icon = config.option("icon");
