@@ -16,7 +16,8 @@ hover freeze for listeners (#105), `record_entities_accessed` by what entered an
 left (#114), `em` metrics through fallback shaping (#115), lazy tab-stop index
 (#113, upstream's `src/fast/tab_stop.rs`; `src/tab_stop.rs` is unused upstream code).
 
-No API is added or changed. `src/profiler.rs` and `src/profiler/journal.rs` use
+The accessibility subtree patch below adds public helper methods; earlier profiler
+and text patches add no API. `src/profiler.rs` and `src/profiler/journal.rs` use
 `try_update` in place of the deprecated `fetch_update` (identical semantics), so
 deny-warnings builds cover the crate.
 
@@ -46,3 +47,21 @@ along it; one going mainly across it (a vertical swipe over a horizontal strip, 
 a little sideways movement) moves it as before without taking the event, so the page
 scrolls too. Tests: `src/fast/tests/wheel_latch.rs`. The upstream backend (`gpui-pre`) keeps
 upstream's wheel behavior.
+
+Accessibility API and initial tree capture (`src/window.rs`, `src/window/a11y.rs`,
+`src/fast/a11y.rs`; identical surface in `vendor/gpui-pre/a11y-subtree-patch.md`):
+- `register_initial_capture_handle`, `unregister_initial_capture_handle`,
+  `capture_initial_tree_for_window`, and `Window::capture_initial_a11y_tree` draw a window
+  with `suppress_platform_update` when accessibility activates and return its initial
+  `TreeUpdate` directly instead of queuing a delayed frame update.
+- `A11y::note_focus_without_node` skips logging when `focus_id` already maps to a live node.
+- `Window::set_a11y_focus_handle` associates a `FocusHandle` with an element's
+  `NodeId`.
+- `A11ySubtreeBuilder::{parent_id, set_node_children, node, node_mut}` let callers
+  read and update accessibility nodes inside a subtree, and
+  `A11yLog::preserve_children` preserves retained Fast log children when
+  `set_node_children` updates a node.
+
+Patched `gpui-base` readable text views call `Window::set_a11y_focus_handle` and
+`A11ySubtreeBuilder::{parent_id, set_node_children}`. Drop this patch once upstream
+`gpui-fast` releases equivalent APIs and initial tree capture.
