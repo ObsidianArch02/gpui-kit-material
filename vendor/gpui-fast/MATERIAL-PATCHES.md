@@ -65,3 +65,18 @@ Accessibility API and initial tree capture (`src/window.rs`, `src/window/a11y.rs
 Patched `gpui-base` readable text views call `Window::set_a11y_focus_handle` and
 `A11ySubtreeBuilder::{parent_id, set_node_children}`. Drop this patch once upstream
 `gpui-fast` releases equivalent APIs and initial tree capture.
+
+## Post-action accessibility flush
+
+`src/window.rs` handles each queued accessibility action in its own App update.
+A second update runs one pending next-frame callback batch so notifications flush
+before `Window::flush_a11y_after_action` checks frame demand. The receiver calls the
+helper at most twice for an enabled, active accessibility tree in a live window
+outside a draw. Each pass has its own App update so focus listeners and deferred
+notifications flush before the next check. Each pass clears its element arena and
+publishes the updated `TreeUpdate` without presentation.
+Pending presentation schedules a platform frame. Remaining dirty state or callbacks
+also wake the platform. Callbacks registered during drawing wait for a later frame.
+The platform action callback only queues requests because AccessKit can hold a tree
+borrow during that callback. Display-link pacing and input dispatch stay unchanged.
+Remove this patch when both engines publish post-action trees before the next tick.

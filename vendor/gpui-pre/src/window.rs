@@ -1307,6 +1307,10 @@ pub struct Window {
     #[cfg(feature = "profiler")]
     debug_frame_overlay: crate::debug_overlay::DebugFrameOverlay,
     pub(crate) a11y: A11y,
+    #[cfg(all(test, not(target_family = "wasm")))]
+    a11y_action_sender: Option<async_channel::Sender<accesskit::ActionRequest>>,
+    #[cfg(all(test, not(target_family = "wasm")))]
+    a11y_published_updates: Vec<accesskit::TreeUpdate>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -1734,6 +1738,8 @@ impl Window {
 
         let accessibility_force_disabled = cx.accessibility_force_disabled;
         let a11y_active_flag = Arc::new(AtomicBool::new(false));
+        #[cfg(all(test, not(target_family = "wasm")))]
+        let mut a11y_action_sender = None;
 
         #[cfg(not(target_family = "wasm"))]
         if !accessibility_force_disabled {
@@ -1751,6 +1757,10 @@ impl Window {
             let (deactivation_sender, deactivation_receiver) = async_channel::unbounded::<()>();
             let (action_sender, action_receiver) =
                 async_channel::unbounded::<accesskit::ActionRequest>();
+            #[cfg(all(test, not(target_family = "wasm")))]
+            {
+                a11y_action_sender = Some(action_sender.clone());
+            }
 
             a11y::register_initial_capture_handle(handle, cx.to_async());
             platform_window.a11y_init(crate::A11yCallbacks {
@@ -1854,6 +1864,59 @@ impl Window {
                             .with_context(|| {
                                 format!(
                                     "handling accessibility action for window {:?}",
+                                    handle.window_id()
+                                )
+                            })
+                            .log_err();
+                        handle
+                            .update(&mut async_cx, |_, window, cx| {
+                                if !window.removed && window.a11y.is_enabled() {
+                                    let callbacks = window.next_frame_callbacks.take();
+                                    for callback in callbacks {
+                                        callback(window, cx);
+                                    }
+                                }
+                            })
+                            .with_context(|| {
+                                format!(
+                                    "running accessibility next-frame callbacks for window {:?}",
+                                    handle.window_id()
+                                )
+                            })
+                            .log_err();
+                        for _ in 0..2 {
+                            let drew = handle
+                                .update(&mut async_cx, |_, window, cx| {
+                                    window.flush_a11y_after_action(cx)
+                                })
+                                .with_context(|| {
+                                    format!(
+                                        "flushing accessibility action for window {:?}",
+                                        handle.window_id()
+                                    )
+                                })
+                                .log_err()
+                                .unwrap_or(false);
+                            if !drew {
+                                break;
+                            }
+                        }
+                        handle
+                            .update(&mut async_cx, |_, window, _| {
+                                if !window.removed && window.a11y.is_enabled() {
+                                    let pending = window.invalidator.is_dirty()
+                                        || !window.next_frame_callbacks.borrow().is_empty();
+                                    if window.needs_present.get() || pending {
+                                        window.platform_window.schedule_frame();
+                                    }
+                                    if pending {
+                                        window.invalidator.wake_platform();
+                                    }
+                                }
+                            })
+                            .with_context(|| {
+                                format!(
+                                    "scheduling accessibility frame for window {:?}",
                                     handle.window_id()
                                 )
                             })
@@ -2437,6 +2500,10 @@ impl Window {
                 accessibility_force_disabled,
                 initial_window_title,
             ),
+            #[cfg(all(test, not(target_family = "wasm")))]
+            a11y_action_sender,
+            #[cfg(all(test, not(target_family = "wasm")))]
+            a11y_published_updates: Vec::new(),
         })
     }
 
@@ -3859,6 +3926,20 @@ impl Window {
         profiling::finish_frame!();
     }
 
+    #[cfg(not(target_family = "wasm"))]
+    fn flush_a11y_after_action(&mut self, cx: &mut App) -> bool {
+        if self.removed || !self.a11y.is_enabled() || !self.invalidator.not_drawing() {
+            return false;
+        }
+        self.a11y.sync_active_flag();
+        if !self.a11y.is_active() || !self.invalidator.is_dirty() {
+            return false;
+        }
+        let arena = self.draw(cx);
+        arena.clear(cx);
+        true
+    }
+
     pub(crate) fn capture_initial_a11y_tree(
         &mut self,
         cx: &mut App,
@@ -4053,6 +4134,8 @@ impl Window {
                     "Sending a11y tree update: {} nodes",
                     tree_update.nodes.len()
                 );
+                #[cfg(all(test, not(target_family = "wasm")))]
+                self.a11y_published_updates.push(tree_update.clone());
                 self.platform_window.a11y_tree_update(tree_update);
             }
         }
@@ -8225,6 +8308,362 @@ mod tests {
         UnderlineStyle, Window, WindowAppearance, WindowOptions, canvas, div, hsla, point, px,
         size,
     };
+
+    #[cfg(not(target_family = "wasm"))]
+    mod a11y_action_flush {
+        use super::*;
+        use crate::{App, Entity, WindowHandle};
+        use accesskit::{Action, ActionRequest, NodeId, Role, TreeId};
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering::SeqCst},
+        };
+
+        struct ActionView {
+            label: &'static str,
+            first: FocusHandle,
+            second: FocusHandle,
+            third: FocusHandle,
+        }
+
+        impl Render for ActionView {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div()
+                    .size_full()
+                    .child(
+                        div()
+                            .id("first")
+                            .role(Role::Button)
+                            .aria_label(self.label)
+                            .track_focus(&self.first)
+                            .size(px(40.)),
+                    )
+                    .child(
+                        div()
+                            .id("second")
+                            .role(Role::Button)
+                            .aria_label("Second")
+                            .track_focus(&self.second)
+                            .size(px(40.)),
+                    )
+                    .child(
+                        div()
+                            .id("third")
+                            .role(Role::Button)
+                            .aria_label("Third")
+                            .track_focus(&self.third)
+                            .size(px(40.)),
+                    )
+            }
+        }
+
+        fn action_window(cx: &mut TestAppContext) -> (WindowHandle<ActionView>, Arc<AtomicBool>) {
+            cx.app.borrow_mut().mode = crate::app::GpuiMode::Production;
+            let window = cx.add_window(|_, cx| ActionView {
+                label: "Home",
+                first: cx.focus_handle(),
+                second: cx.focus_handle(),
+                third: cx.focus_handle(),
+            });
+            let active_flag = Arc::new(AtomicBool::new(false));
+            cx.update_window(window.into(), |_, window, cx| {
+                window.a11y = super::super::a11y::A11y::new(active_flag.clone(), false, None);
+                active_flag.store(true, SeqCst);
+                window.active.set(true);
+                window.refresh();
+                let arena = window.draw(cx);
+                arena.clear(cx);
+                assert_eq!(window.a11y_published_updates.len(), 1);
+                assert_label(window, "Home");
+                assert!(!window.invalidator.is_dirty());
+            })
+            .unwrap();
+            (window, active_flag)
+        }
+
+        fn assert_label(window: &Window, label: &str) {
+            assert!(
+                window
+                    .a11y_published_updates
+                    .last()
+                    .unwrap()
+                    .nodes
+                    .iter()
+                    .any(|(_, node)| node.label() == Some(label))
+            );
+        }
+
+        fn node_id(window: &Window, label: &str) -> NodeId {
+            window
+                .a11y_published_updates
+                .last()
+                .unwrap()
+                .nodes
+                .iter()
+                .find(|(_, node)| node.label() == Some(label))
+                .unwrap()
+                .0
+        }
+
+        fn enqueue(cx: &mut TestAppContext, handle: WindowHandle<ActionView>, action: Action) {
+            let (sender, target_node) = handle
+                .update(cx, |_, window, _| {
+                    (
+                        window.a11y_action_sender.as_ref().unwrap().clone(),
+                        node_id(window, "Home"),
+                    )
+                })
+                .unwrap();
+            sender
+                .try_send(ActionRequest {
+                    action,
+                    target_tree: TreeId::ROOT,
+                    target_node,
+                    data: None,
+                })
+                .unwrap();
+            cx.run_until_parked();
+        }
+
+        fn on_click(
+            cx: &mut TestAppContext,
+            handle: WindowHandle<ActionView>,
+            mut listener: impl FnMut(&Entity<ActionView>, &mut Window, &mut App) + 'static,
+        ) {
+            handle
+                .update(cx, |_, window, cx| {
+                    let entity = cx.entity();
+                    let target = node_id(window, "Home");
+                    window.on_a11y_action(target, Action::Click, move |_, window, cx| {
+                        listener(&entity, window, cx);
+                    });
+                })
+                .unwrap();
+        }
+
+        #[gpui::test]
+        fn action_receiver_publishes_notify_without_a_frame(cx: &mut TestAppContext) {
+            let (handle, _) = action_window(cx);
+            on_click(cx, handle, |entity, _, cx| {
+                entity.update(cx, |view, cx| {
+                    view.label = "Settings";
+                    cx.notify();
+                })
+            });
+            enqueue(cx, handle, Action::Click);
+            handle
+                .update(cx, |_, window, _| {
+                    assert_label(window, "Settings");
+                    assert_eq!(window.a11y_published_updates.len(), 2);
+                    assert!(!window.invalidator.is_dirty());
+                    assert!(window.needs_present.get());
+                })
+                .unwrap();
+            assert!(cx.test_window(handle.into()).frame_scheduled());
+        }
+
+        #[gpui::test]
+        fn action_receiver_publishes_refresh_in_an_inactive_window(cx: &mut TestAppContext) {
+            let (handle, _) = action_window(cx);
+            handle
+                .update(cx, |_, window, _| window.active.set(false))
+                .unwrap();
+            on_click(cx, handle, |entity, window, cx| {
+                entity.update(cx, |view, _| view.label = "Settings");
+                window.refresh();
+            });
+            enqueue(cx, handle, Action::Click);
+            handle
+                .update(cx, |_, window, _| {
+                    assert_label(window, "Settings");
+                    assert_eq!(window.a11y_published_updates.len(), 2);
+                })
+                .unwrap();
+        }
+
+        #[gpui::test]
+        fn action_receiver_flushes_one_callback_batch(cx: &mut TestAppContext) {
+            let (handle, _) = action_window(cx);
+            let callback_count = Rc::new(Cell::new(0));
+            let count = callback_count.clone();
+            on_click(cx, handle, move |entity, window, _| {
+                let entity = entity.clone();
+                let count = count.clone();
+                window.on_next_frame(move |window, cx| {
+                    count.set(count.get() + 1);
+                    entity.update(cx, |view, cx| {
+                        view.label = "Settings";
+                        cx.notify();
+                    });
+                    window.on_next_frame(move |_, _| count.set(count.get() + 1));
+                });
+            });
+            enqueue(cx, handle, Action::Click);
+            assert_eq!(callback_count.get(), 1);
+            handle
+                .update(cx, |_, window, _| {
+                    assert_label(window, "Settings");
+                    assert_eq!(window.a11y_published_updates.len(), 2);
+                    assert_eq!(window.next_frame_callbacks.borrow().len(), 1);
+                })
+                .unwrap();
+            assert!(cx.test_window(handle.into()).frame_scheduled());
+        }
+
+        #[gpui::test]
+        fn action_receiver_flushes_focus_listener_redirty(cx: &mut TestAppContext) {
+            let (handle, _) = action_window(cx);
+            handle
+                .update(cx, |view, window, cx| {
+                    cx.on_focus(&view.first, window, |view, window, cx| {
+                        window.focus(&view.second, cx);
+                    })
+                    .detach();
+                })
+                .unwrap();
+            enqueue(cx, handle, Action::Focus);
+            handle
+                .update(cx, |view, window, _| {
+                    assert_eq!(window.a11y_published_updates.len(), 3);
+                    let update = window.a11y_published_updates.last().unwrap();
+                    assert_eq!(update.focus, node_id(window, "Second"));
+                    assert!(view.second.is_focused(window));
+                    assert!(!window.invalidator.is_dirty());
+                })
+                .unwrap();
+        }
+
+        #[gpui::test]
+        fn action_receiver_bounds_focus_redraws(cx: &mut TestAppContext) {
+            let (handle, _) = action_window(cx);
+            handle
+                .update(cx, |view, window, cx| {
+                    cx.on_focus(&view.first, window, |view, window, cx| {
+                        window.focus(&view.second, cx);
+                    })
+                    .detach();
+                    cx.on_focus(&view.second, window, |view, window, cx| {
+                        window.focus(&view.third, cx);
+                    })
+                    .detach();
+                })
+                .unwrap();
+            enqueue(cx, handle, Action::Focus);
+            handle
+                .update(cx, |view, window, _| {
+                    assert_eq!(window.a11y_published_updates.len(), 3);
+                    assert_eq!(
+                        window.a11y_published_updates.last().unwrap().focus,
+                        node_id(window, "Second")
+                    );
+                    assert!(view.third.is_focused(window));
+                    assert!(window.invalidator.is_dirty());
+                })
+                .unwrap();
+            assert!(cx.test_window(handle.into()).frame_scheduled());
+        }
+
+        #[gpui::test]
+        fn action_receiver_flushes_deferred_focus_notify(cx: &mut TestAppContext) {
+            let (handle, _) = action_window(cx);
+            handle
+                .update(cx, |view, window, cx| {
+                    cx.on_focus(&view.first, window, |_, window, cx| {
+                        let entity = cx.entity();
+                        window.defer(cx, move |_, cx| {
+                            entity.update(cx, |view, cx| {
+                                view.label = "Settings";
+                                cx.notify();
+                            });
+                        });
+                    })
+                    .detach();
+                })
+                .unwrap();
+            enqueue(cx, handle, Action::Focus);
+            handle
+                .update(cx, |_, window, _| {
+                    assert_label(window, "Settings");
+                    assert_eq!(window.a11y_published_updates.len(), 3);
+                    assert!(!window.invalidator.is_dirty());
+                })
+                .unwrap();
+        }
+
+        #[gpui::test]
+        fn action_receiver_keeps_a_clean_tree(cx: &mut TestAppContext) {
+            let (handle, _) = action_window(cx);
+            on_click(cx, handle, |_, _, _| {});
+            enqueue(cx, handle, Action::Click);
+            handle
+                .update(cx, |_, window, _| {
+                    assert_label(window, "Home");
+                    assert_eq!(window.a11y_published_updates.len(), 1);
+                    assert!(!window.invalidator.is_dirty());
+                })
+                .unwrap();
+        }
+
+        #[gpui::test]
+        fn action_receiver_skips_inactive_accessibility(cx: &mut TestAppContext) {
+            let (handle, active_flag) = action_window(cx);
+            active_flag.store(false, SeqCst);
+            let platform_window = cx.test_window(handle.into());
+            let wakes = platform_window.frame_wake_count();
+            on_click(cx, handle, |entity, _, cx| {
+                entity.update(cx, |view, cx| {
+                    view.label = "Settings";
+                    cx.notify();
+                })
+            });
+            enqueue(cx, handle, Action::Click);
+            handle
+                .update(cx, |_, window, _| {
+                    assert_eq!(window.a11y_published_updates.len(), 1);
+                    assert_label(window, "Home");
+                    assert!(window.invalidator.is_dirty());
+                })
+                .unwrap();
+            assert!(platform_window.frame_wake_count() > wakes);
+        }
+
+        #[gpui::test]
+        fn action_receiver_skips_callbacks_after_removal(cx: &mut TestAppContext) {
+            let (handle, _) = action_window(cx);
+            let callback_ran = Rc::new(Cell::new(false));
+            let ran = callback_ran.clone();
+            on_click(cx, handle, move |_, window, _| {
+                let ran = ran.clone();
+                window.on_next_frame(move |_, _| ran.set(true));
+                window.remove_window();
+            });
+            enqueue(cx, handle, Action::Click);
+            assert!(!callback_ran.get());
+            assert!(!cx.app.borrow().windows.contains_key(handle.window_id()));
+        }
+
+        #[gpui::test]
+        fn action_receiver_skips_disabled_accessibility(cx: &mut TestAppContext) {
+            let (handle, active_flag) = action_window(cx);
+            let callback_ran = Rc::new(Cell::new(false));
+            let ran = callback_ran.clone();
+            on_click(cx, handle, move |_, window, _| {
+                window.a11y = super::super::a11y::A11y::new(active_flag.clone(), true, None);
+                let ran = ran.clone();
+                window.on_next_frame(move |_, _| ran.set(true));
+                window.refresh();
+            });
+            enqueue(cx, handle, Action::Click);
+            assert!(!callback_ran.get());
+            handle
+                .update(cx, |_, window, _| {
+                    assert_eq!(window.a11y_published_updates.len(), 1);
+                    assert!(window.invalidator.is_dirty());
+                    assert_eq!(window.next_frame_callbacks.borrow().len(), 1);
+                })
+                .unwrap();
+        }
+    }
 
     #[gpui::test]
     async fn test_focus_handle_release(cx: &mut TestAppContext) {
