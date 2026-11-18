@@ -1,7 +1,7 @@
 # Modified by Longbridge for gpui-fast publication.
 [package]
 name = "gpui-fast"
-version = "0.1.15"
+version = "0.1.16"
 edition = "2024"
 authors = ["Nathan Sobo <nathan@zed.dev>", "Longbridge"]
 description = "gpui: GPUI with gpui-fast rendering and layout optimizations"
@@ -13,7 +13,7 @@ readme = "README.md"
 keywords = ["desktop", "gui", "immediate"]
 categories = ["gui"]
 autobenches = false
-documentation = "https://docs.rs/gpui-fast/0.1.15/gpui/"
+documentation = "https://docs.rs/gpui-fast/0.1.16/gpui/"
 autoexamples = false
 autotests = false
 include = ["/src/**", "/resources/**", "/build.rs", "/Cargo.toml", "/README.md", "/LICENSE", "/NOTICE"]
@@ -94,7 +94,7 @@ optional = true
 
 [dependencies.gpui_macros]
 package = "gpui-fast-macros"
-version = "^0.1.15"
+version = "^0.1.16"
 path = "../gpui_macros"
 
 [dependencies.gpui_shared_string]

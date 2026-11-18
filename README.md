@@ -41,8 +41,8 @@ Minimum Rust: **1.98**.
 
 ```toml
 [dependencies]
-gpui-kit = "0.9.1"
-gpui-kit-material = "0.1"
+gpui-kit = "0.10.0"
+gpui-kit-material = "0.2"
 ```
 
 Use the `gpui-kit` version the library depends on, so that Kit, GPUI and the icons
@@ -51,12 +51,12 @@ resolve to one implementation. No `[patch]` is needed.
 To compile only the parts you use, turn off the defaults and name the component groups:
 
 ```toml
-gpui-kit-material = { version = "0.1", default-features = false, features = ["buttons", "selection", "gpui-fast", "embedded-symbols"] }
+gpui-kit-material = { version = "0.2", default-features = false, features = ["buttons", "selection", "gpui-fast", "embedded-symbols"] }
 ```
 
 The [crate README](crates/material/README.md#features) lists every feature.
 
-**WebAssembly:** published Kit 0.9.1 builds its web platform with threads, which needs
+**WebAssembly:** published Kit 0.10.0 builds its web platform with threads, which needs
 the nightly toolchain named in Kit's
 [WebAssembly guide](https://github.com/longbridge/gpui-kit/blob/main/website/docs/webassembly.md).
 

@@ -2,10 +2,10 @@
 //! groups, choice tiles, connected button groups, tabs, navigation bars and
 //! rails.
 //!
-//! GPUI Base's `Tab`/`Tabs`, `Radio`/`RadioGroup` own pointer activation and
-//! their roles but deliberately leave compound keyboard navigation to the
-//! caller (`gpui-base/src/tabs.rs`: "Add compound keyboard navigation with
-//! roving focus"), and Kit's `TabBar` has no arrow-key navigation either. This
+//! GPUI Base's `Tab` and `Radio`/`RadioGroup` own pointer activation and
+//! their roles but leave compound keyboard navigation to the caller. Base
+//! 0.10's `Tabs` roves its own tabs, but with manual activation only and no
+//! reveal or exit, so Material's tab lists use [`tab_list`] instead. This
 //! module is that one missing behavior:
 //!
 //! - one tab stop per widget ([`Roving::tab_stop`]): the focused item while
@@ -64,6 +64,17 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("home", FocusFirstItem, Some(BOTH_CONTEXT)),
         KeyBinding::new("end", FocusLastItem, Some(BOTH_CONTEXT)),
     ]);
+}
+
+/// The tab-list root of a widget whose items are Base [`gpui_base::Tab`]s:
+/// an element with the tab-list role, as Base 0.9's `Tabs` was. Base 0.10's
+/// `Tabs` gives each `Tab` inside it a focus handle of its own and moves
+/// focus between them on arrow keys (`gpui-base/src/tabs.rs`,
+/// `TabListScope`), which would replace the handles this module roves and
+/// its automatic activation, reveal and exit; outside it a `Tab` stays
+/// pointer-only.
+pub(crate) fn tab_list(id: impl Into<ElementId>) -> Stateful<Div> {
+    div().id(id).role(Role::TabList)
 }
 
 /// Which arrow keys move between a widget's items.

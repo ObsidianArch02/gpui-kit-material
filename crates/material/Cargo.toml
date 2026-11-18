@@ -78,11 +78,12 @@ dynamic-color = ["gpui-kit-material-color/dynamic"]
 log = "0.4"
 gpui-kit-material-color.workspace = true
 gpui-kit.workspace = true
-gpui-material-symbols = { version = "0.1", default-features = false, features = ["gpui-kit"] }
+gpui-material-symbols = { version = "0.2", default-features = false, features = ["gpui-kit"] }
 gpui-base.workspace = true
-# Constrain gpui-fast while on gpui-kit 0.9.1: gpui-base 0.9.1 specifies `^0.1.14`, and
-# gpui-fast 0.1.16 added a blanket `IntoElement` impl that conflicts with gpui-base 0.9.1.
-gpui-fast = { version = "=0.1.15", default-features = false, optional = true }
+# Pin gpui-fast to the release gpui-kit 0.10.0 builds with: Kit and Base specify `^0.1.16`,
+# but a later gpui-fast (0.1.16 added a blanket `IntoElement` impl that broke Base 0.9.1)
+# is not tested with this release; the workspace vendors 0.1.16 (vendor/gpui-fast).
+gpui-fast = { version = "=0.1.16", default-features = false, optional = true }
 # Already in Cargo.lock through GPUI Base's calendar; the pickers share its date types.
 chrono = { version = "0.4.38", default-features = false, features = ["clock"], optional = true }
 

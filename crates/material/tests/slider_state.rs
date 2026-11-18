@@ -65,11 +65,21 @@ fn a_dropped_handle_stands_at_its_value(cx: &mut TestAppContext) {
 fn an_accessibility_step_reports_a_change(cx: &mut TestAppContext) {
     let (state, cx) = sized(SliderState::new().default_value(99.), cx);
     let changes = Rc::new(Cell::new(0));
+    // Since Kit 0.10 a step is a complete gesture: each Change is followed by a Release.
+    let releases = Rc::new(Cell::new(0));
     cx.update(|_, cx| {
         let changes = changes.clone();
-        cx.subscribe(&state, move |_, event: &SliderEvent, _| {
-            assert!(matches!(event, SliderEvent::Change(_)));
-            changes.set(changes.get() + 1);
+        let releases = releases.clone();
+        cx.subscribe(&state, move |_, event: &SliderEvent, _| match event {
+            SliderEvent::Change(_) => changes.set(changes.get() + 1),
+            SliderEvent::Release(_) => {
+                assert_eq!(
+                    releases.get() + 1,
+                    changes.get(),
+                    "Release follows its Change"
+                );
+                releases.set(releases.get() + 1);
+            }
         })
         .detach();
     });
@@ -80,12 +90,15 @@ fn an_accessibility_step_reports_a_change(cx: &mut TestAppContext) {
     };
     step(1., cx);
     assert_eq!(changes.get(), 1);
+    assert_eq!(releases.get(), 1);
     assert_eq!(state.read_with(cx, |state, _| state.value().end()), 100.);
     // At its end the action changes nothing and reports nothing.
     step(1., cx);
     assert_eq!(changes.get(), 1);
+    assert_eq!(releases.get(), 1);
     step(-1., cx);
     assert_eq!(changes.get(), 2);
+    assert_eq!(releases.get(), 2);
 }
 
 #[gpui::test]

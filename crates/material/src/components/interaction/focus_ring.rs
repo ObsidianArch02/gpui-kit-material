@@ -158,6 +158,7 @@ pub(crate) fn ring_geometry(
     }
 }
 
+#[cfg(not(feature = "gpui-fast"))]
 impl IntoElement for ButtonFocusRing {
     type Element = Self;
     fn into_element(self) -> Self {
@@ -277,6 +278,7 @@ pub(crate) struct RingLayerElement {
     ring: PendingRing,
 }
 
+#[cfg(not(feature = "gpui-fast"))]
 impl IntoElement for RingLayerElement {
     type Element = Self;
     fn into_element(self) -> Self {

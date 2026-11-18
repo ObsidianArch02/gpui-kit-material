@@ -1,11 +1,11 @@
 # gpui-fast source
 
-`gpui-fast` 0.1.15 as published on crates.io, with the local changes below, recorded by
-`scripts/vendor-gpui-fast.py --published 0.1.15`. `SOURCE.json` records the archive's
+`gpui-fast` 0.1.16 as published on crates.io, with the local changes below, recorded by
+`scripts/vendor-gpui-fast.py --published 0.1.16`. `SOURCE.json` records the archive's
 SHA-256, every upstream file hash and the original and patched hash of each changed
 file. The package-level `Cargo.lock` is not vendored. The other gpui-fast crates
 (`-macos`, `-linux`, `-windows`, `-wgpu`, `-web`, `-platform`, `-macros`) come from
-crates.io 0.1.15 unchanged.
+crates.io 0.1.16 unchanged.
 
 Released in 0.1.15 and no longer patched here: a `measure_all` list measured over later
 frames after a width change (#129, upstream's `src/fast/list_measure.rs`).
