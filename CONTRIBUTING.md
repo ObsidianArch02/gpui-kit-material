@@ -69,6 +69,15 @@ evidence is still open.
 
 The profiler's finer budgets in DEVELOPMENT.md are diagnostics, not release gates.
 
+## Automation
+
+New Kit releases are ported and published automatically ([RELEASING.md](docs/RELEASING.md#automated-kit-releases)).
+New issues get an automated first reply, and pull requests an automated review, under the
+maintainer's account (`MAINTAINER_TOKEN`); Claude Code only reads and decides. A
+contributor's pull request is closed when it is not needed, and otherwise finished by us
+(conflicts with `main` resolved, redundant code and tests removed, problems fixed) and
+merged once CI passes. Changes under `.github/` are never merged automatically.
+
 ## Documents
 
 | Document | Contents |

@@ -63,6 +63,18 @@ CI's `release-readiness` job runs both on every push, and its `package` job runs
 `cargo publish --dry-run` of each library crate. To preview a Kit that is not released,
 `--kit-git <Kit commit>` takes `gpui-kit` and `gpui-base` from Kit's Git at that commit.
 
+## Automated Kit releases
+
+Each new `gpui-kit` release is ported and published without a maintainer.
+`.github/workflows/renovate.yml` runs Renovate hourly with the maintainer's token; it opens
+`renovate/gpui-kit` for the release. `upstream-port.yml` has Claude Code carry out the
+release day steps below on that branch ([.github/upstream-port.md](../.github/upstream-port.md)),
+waiting first for a `gpui-material-symbols` release on the same Kit, and labels the PR
+`port-ready` when its checks pass. Once CI is green, `upstream-land.yml` merges it with a
+merge commit and tags `material-v<version>` (and `color-v<version>` when that crate
+changed); `release.yml` then publishes both crates with the `CARGO_REGISTRY_TOKEN` secret and
+makes a GitHub release. Performance targets are not measured on that path.
+
 ## Release day
 
 1. Kit has released what the library calls. Set the root `Cargo.toml`'s `gpui-kit` and

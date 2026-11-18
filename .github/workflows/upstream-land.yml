@@ -1,0 +1,42 @@
+name: Upstream land
+
+# Merges a finished port once CI passes on it and tags the release it makes
+# (.github/scripts/land.py); a pushed tag starts release.yml.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: ["renovate/gpui-*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-land
+  cancel-in-progress: false
+
+jobs:
+  land:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: python3 .github/scripts/land.py
+        env:
+          MAINTAINER_TOKEN: ${{ secrets.MAINTAINER_TOKEN }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          # rust-toolchain.toml's pinned compiler is not installed here; cargo metadata only.
+          RUSTUP_TOOLCHAIN: stable
+          CI_WORKFLOWS: CI
+          # A merge commit keeps the port's own commits, which the consumer patch set's
+          # revision in docs/ARCHITECTURE.md points to.
+          MERGE_METHOD: merge
+          TAGS: gpui-kit-material=material-v,gpui-kit-material-color=color-v
+          RELEASE_BRANCHES: renovate/gpui-kit
