@@ -19,7 +19,7 @@
 //!
 //! Behavior is GPUI Base's: each item is a Base [`gpui_base::Tab`] (tab role,
 //! selection, position in set, pointer and Enter/Space activation) inside a
-//! Base [`gpui_base::Tabs`] tab list, wrapped in a navigation landmark. Arrow
+//! tab list ([`super::roving::tab_list`]), wrapped in a navigation landmark. Arrow
 //! keys rove focus between items through the shared [`super::roving`]
 //! helper; Enter or Space activates.
 use super::interaction::{ButtonFocusRing, ButtonRipple};
@@ -790,7 +790,7 @@ impl RenderOnce for NavigationBar {
         let geometry = layout.geometry();
         let horizontal = layout == NavItemLayout::Horizontal;
         let ripple = self.ripple;
-        let lane = gpui_base::Tabs::new((self.id.clone(), "nav-items"))
+        let lane = roving::tab_list((self.id.clone(), "nav-items"))
             .aria_label(self.label.clone())
             .flex()
             .flex_row()
@@ -1078,7 +1078,7 @@ impl RenderOnce for NavigationRail {
         let mut sections = self.sections;
         sections.sort_by_key(|(before, _)| *before);
         let mut sections = sections.into_iter().peekable();
-        let mut lane = gpui_base::Tabs::new((self.id.clone(), "rail-items"))
+        let mut lane = roving::tab_list((self.id.clone(), "rail-items"))
             .aria_label(self.label.clone())
             .aria_orientation(accesskit::Orientation::Vertical)
             .w_full()

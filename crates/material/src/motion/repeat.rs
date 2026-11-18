@@ -114,6 +114,7 @@ fn visible(bounds: Bounds<Pixels>, mask: Bounds<Pixels>, viewport: Size<Pixels>)
     right > left && bottom > top
 }
 
+#[cfg(not(feature = "gpui-fast"))]
 impl<E: IntoElement + 'static> IntoElement for RepeatWhenVisible<E> {
     type Element = Self;
     fn into_element(self) -> Self {

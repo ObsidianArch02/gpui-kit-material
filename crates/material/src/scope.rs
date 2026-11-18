@@ -306,6 +306,7 @@ pub struct ScopeElement {
     child: AnyElement,
 }
 
+#[cfg(not(feature = "gpui-fast"))]
 impl IntoElement for ScopeElement {
     type Element = Self;
     fn into_element(self) -> Self {
@@ -370,6 +371,7 @@ struct ReplayElement {
     child: AnyElement,
 }
 
+#[cfg(not(feature = "gpui-fast"))]
 impl IntoElement for ReplayElement {
     type Element = Self;
     fn into_element(self) -> Self {

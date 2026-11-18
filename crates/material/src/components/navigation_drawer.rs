@@ -20,7 +20,7 @@
 //! spring. Reduced motion finishes spatial motion at once and keeps fades.
 //!
 //! Behavior is shared with the navigation rail: each destination is a GPUI
-//! Base `Tab` in a vertical Base `Tabs` list inside a navigation landmark;
+//! Base `Tab` in a vertical tab list inside a navigation landmark;
 //! arrow keys rove focus (see [`super::roving`]), Enter or Space activates.
 use super::interaction::{ButtonFocusRing, ButtonRipple};
 use super::navigation::{
@@ -678,7 +678,7 @@ impl RenderOnce for NavigationDrawer {
         let mut sections = self.sections;
         sections.sort_by_key(|(before, _)| *before);
         let mut sections = sections.into_iter().peekable();
-        let mut lane = gpui_base::Tabs::new((self.id.clone(), "drawer-items"))
+        let mut lane = super::roving::tab_list((self.id.clone(), "drawer-items"))
             .aria_label(self.label.clone())
             .aria_orientation(accesskit::Orientation::Vertical)
             .w_full()

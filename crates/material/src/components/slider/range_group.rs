@@ -51,6 +51,7 @@ pub(super) struct DisabledNode<E> {
     disabled: bool,
 }
 
+#[cfg(not(feature = "gpui-fast"))]
 impl<E: Element> IntoElement for DisabledNode<E> {
     type Element = Self;
 

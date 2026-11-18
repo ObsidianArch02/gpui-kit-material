@@ -1,6 +1,6 @@
 --- Cargo.toml.orig
 +++ Cargo.toml
-@@ -10,13 +10,30 @@
+@@ -10,13 +10,31 @@
  repository = "https://github.com/longbridge/gpui-kit"
  readme = "README.md"
  publish = true
@@ -19,6 +19,7 @@
 +map_entry = "allow"
 +module_inception = "allow"
 +non_canonical_partial_ord_impl = "allow"
++redundant_clone = "deny"
 +reversed_empty_ranges = "allow"
 +single_range_in_vec_init = "allow"
 +style = { level = "allow", priority = -1 }
@@ -34,7 +35,7 @@
  # Select GPUI Fast across the core, platforms, and already-enabled layers.
  gpui-fast = ["dep:gpui-fast", "dep:gpui-fast-platform", "dep:gpui-fast-web", "gpui-base/gpui-fast", "gpui-component?/gpui-fast", "gpui-kit-assets?/gpui-fast"]
  # The styled component library, `gpui_kit::component`. Initializes `gpui-base` too.
-@@ -76,26 +93,28 @@
+@@ -76,26 +94,28 @@
  tree-sitter-zig = ["component", "gpui-component/tree-sitter-zig"]
  
  [dependencies]
@@ -46,25 +47,25 @@
 -gpui-kit-assets = { workspace = true, optional = true }
 +gpui_macros = { package = "gpui-pre-macros", version = "=0.3.12" }
 +gpui = { package = "gpui-pre", version = "=0.3.12" }
-+gpui-fast = { package = "gpui-fast", version = "0.1.14", features = ["windows-manifest-provided-by-host"], optional = true }
-+gpui-base = { version = "0.9.1" }
-+gpui-component = { version = "0.9.1", optional = true }
-+gpui-kit-assets = { version = "0.9.1", optional = true }
++gpui-fast = { package = "gpui-fast", version = "0.1.16", features = ["windows-manifest-provided-by-host"], optional = true }
++gpui-base = { version = "0.10.0" }
++gpui-component = { version = "0.10.0", optional = true }
++gpui-kit-assets = { version = "0.10.0", optional = true }
  
 -[target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
 -gpui_platform.workspace = true
 -gpui-fast-platform = { workspace = true, optional = true }
 +[target.'cfg(not(any(target_os = "ios", target_os = "android", target_family = "wasm")))'.dependencies]
 +gpui_platform = { package = "gpui-pre-platform", version = "=0.3.12", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
-+gpui-fast-platform = { package = "gpui-fast-platform", version = "0.1.14", features = ["font-kit", "x11", "wayland", "runtime_shaders"], optional = true }
++gpui-fast-platform = { package = "gpui-fast-platform", version = "0.1.16", features = ["font-kit", "x11", "wayland", "runtime_shaders"], optional = true }
  
  [target.'cfg(target_family = "wasm")'.dependencies]
 -gpui_web.workspace = true
 -gpui-fast-web = { workspace = true, optional = true }
 +gpui_platform = { package = "gpui-pre-platform", version = "=0.3.12", features = ["font-kit", "x11", "wayland", "runtime_shaders"], default-features = false }
 +gpui_web = { package = "gpui-pre-web", version = "=0.3.12", default-features = false }
-+gpui-fast-platform = { package = "gpui-fast-platform", version = "0.1.14", features = ["font-kit", "x11", "wayland", "runtime_shaders"], default-features = false, optional = true }
-+gpui-fast-web = { package = "gpui-fast-web", version = "0.1.14", default-features = false, optional = true }
++gpui-fast-platform = { package = "gpui-fast-platform", version = "0.1.16", features = ["font-kit", "x11", "wayland", "runtime_shaders"], default-features = false, optional = true }
++gpui-fast-web = { package = "gpui-fast-web", version = "0.1.16", default-features = false, optional = true }
  
  [dev-dependencies]
  chrono = "0.4.38"
@@ -72,7 +73,7 @@
 -gpui-fast = { workspace = true, features = ["test-support"] }
 -lsp-types.workspace = true
 +gpui = { package = "gpui-pre", version = "=0.3.12", features = ["test-support"] }
-+gpui-fast = { package = "gpui-fast", version = "0.1.14", features = ["windows-manifest-provided-by-host", "test-support"] }
++gpui-fast = { package = "gpui-fast", version = "0.1.16", features = ["windows-manifest-provided-by-host", "test-support"] }
 +lsp-types = { version = "0.97.0", features = ["proposed"] }
  
  [[test]]

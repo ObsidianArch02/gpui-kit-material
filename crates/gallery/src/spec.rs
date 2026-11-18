@@ -613,6 +613,7 @@ impl RemScaled {
     }
 }
 
+#[cfg(not(feature = "gpui-fast"))]
 impl IntoElement for RemScaled {
     type Element = Self;
     fn into_element(self) -> Self {

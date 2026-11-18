@@ -31,6 +31,7 @@ pub struct PrepaintBounds {
     on_prepaint: Option<OnPrepaint>,
 }
 
+#[cfg(not(feature = "gpui-fast"))]
 impl IntoElement for PrepaintBounds {
     type Element = Self;
     fn into_element(self) -> Self {

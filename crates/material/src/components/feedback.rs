@@ -690,6 +690,7 @@ impl InteractiveElement for CardSurface {
         self.inner.interactivity()
     }
 }
+#[cfg(not(feature = "gpui-fast"))]
 impl IntoElement for CardSurface {
     type Element = Self;
     fn into_element(self) -> Self {

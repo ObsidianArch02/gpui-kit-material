@@ -13,7 +13,7 @@
 //! the default spatial spring (retargeting from wherever it is), while label
 //! and icon colors cross-fade on the fast effects spring.
 //!
-//! Behavior is GPUI Base's `Tab`/`Tabs` (tab list and tab roles, selection,
+//! Behavior is GPUI Base's `Tab` in a [`super::roving::tab_list`] (tab list and tab roles, selection,
 //! position in set, pointer and Enter/Space activation); arrow keys, Home
 //! and End rove focus through the shared [`super::roving`] helper, and
 //! activation is manual unless [`MaterialTabs::auto_activate`] is set.
@@ -684,7 +684,7 @@ impl RenderOnce for MaterialTabs {
                 }
             })
         };
-        let list = gpui_base::Tabs::new(self.id)
+        let list = roving::tab_list(self.id)
             .aria_label(self.label)
             .relative()
             .w_full()

@@ -16,7 +16,7 @@ gpui-fast = ["gpui-kit/gpui-fast", "gpui-kit-material/gpui-fast", "gpui-fps/gpui
 [dependencies]
 # `profiler` is what the engine rules in CI's consumer step test.
 gpui-kit = { version = "0.10.0", features = ["profiler"] }
-gpui-fps = "0.9.1"
+gpui-fps = "0.10.0"
 gpui-kit-material = { path = "../material", default-features = false, features = ["full", "serde", "embedded-symbols"] }
 
 # Lets `cargo test -p consumer-check -p gpui-pre --lib` run the engine tests as a

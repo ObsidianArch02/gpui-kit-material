@@ -130,6 +130,7 @@ pub fn sized_content(
     }
 }
 
+#[cfg(not(feature = "gpui-fast"))]
 impl IntoElement for SizedContent {
     type Element = Self;
     fn into_element(self) -> Self {
