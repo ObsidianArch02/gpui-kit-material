@@ -14,6 +14,12 @@ yanked = "deny"
 # dependencies: GPUI's tree holds several (paste, instant, rustybuzz, ttf-parser,
 # zvariant, zbus_names, rustls-pemfile) that only upstream can replace.
 unmaintained = "workspace"
+ignore = [
+    # chrono is unmaintained, with no replacement release. The pickers re-export its date
+    # types, and gpui-kit and the vendored engine crates depend on it, so moving off it is
+    # a breaking change to make with upstream.
+    { id = "RUSTSEC-2026-0543", reason = "chrono: public picker API and the GPUI stack depend on it" },
+]
 
 [licenses]
 confidence-threshold = 0.9
