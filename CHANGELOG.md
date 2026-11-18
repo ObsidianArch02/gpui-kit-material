@@ -7,6 +7,31 @@ commit messages.
 
 Nothing yet.
 
+## gpui-kit-material 0.2.0 (2026-11-18)
+
+`gpui-kit-material` 0.2.0 follows `gpui-kit` 0.10.0 (with `gpui-base` 0.10.0, `gpui-fast`
+0.1.16 and `gpui-pre` 0.3.12) and `gpui-material-symbols` 0.2.0. It requires
+`gpui-kit-material-color` 0.1.1 (unchanged, so not released again). Kit 0.10 is a minor
+release with breaking API changes, so this is one too.
+
+### Changed
+
+- Depend on `gpui-kit = "0.10.0"`; Kit 0.9 is no longer supported. Update your own
+  `gpui-kit` dependency with this release so that one Kit, Base and GPUI resolve.
+- Icons come from `gpui-material-symbols` 0.2, the Symbols release on Kit 0.10.
+- With the `gpui-fast` feature, `gpui-fast` is pinned to `=0.1.16` (was `=0.1.15`), the
+  release Kit 0.10.0 builds with. GPUI Fast 0.1.16 implements `IntoElement` for every
+  `Element` itself, so on that backend drop your own `impl IntoElement for X` on element
+  types (Kit 0.10's release notes).
+- The consumer patch set in docs/ARCHITECTURE.md moves to this release's revision, with
+  the same engine patches rebased onto gpui-fast 0.1.16.
+
+### Unchanged
+
+- Material tabs, navigation bars, rails and drawers keep their own roving keyboard focus
+  (including automatic activation and reveal); Base 0.10's new `Tabs` keyboard navigation
+  is not used for them.
+
 ## gpui-kit-material 0.1.5 (2026-11-16)
 
 `gpui-kit-material` 0.1.5 requires `gpui-kit-material-color` 0.1.1 (unchanged, so not
