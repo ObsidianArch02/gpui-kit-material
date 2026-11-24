@@ -68,10 +68,11 @@ fn edge_child_is_clipped_and_refined_outline_paints_above_it(cx: &mut TestAppCon
     cx.update(|window, _| {
         let scale = window.scale_factor();
         let quads = window.painted_quads();
-        let outline = quads
+        let outline_index = quads
             .iter()
-            .find(|q| q.border_widths.top.0 == scale)
+            .position(|q| q.border_widths.top.0 == scale)
             .expect("outline");
+        let outline = &quads[outline_index];
         assert_eq!(outline.bounds.size.width.0, 80. * scale);
         assert_eq!(outline.bounds.size.height.0, 60. * scale);
         assert_eq!(outline.corner_radii.top_left.0, 6. * scale);
@@ -109,13 +110,20 @@ fn edge_child_is_clipped_and_refined_outline_paints_above_it(cx: &mut TestAppCon
         {
             // Upstream has rectangular overflow only; do not claim rounded
             // clipping. Still verify its actual child mask and outline order.
-            let child = quads
+            // Overlapping quads may share a draw order; the renderer draws
+            // those in the scene's sorted (stable, paint) order, so compare
+            // the order and then the position in the sorted quads.
+            let child_index = quads
                 .iter()
-                .find(|q| q.bounds.origin.x.0 == -10. * scale)
+                .position(|q| q.bounds.origin.x.0 == -10. * scale)
                 .expect("child quad");
+            let child = &quads[child_index];
             assert_eq!(child.content_mask.bounds.size.width.0, 80. * scale);
             assert_eq!(child.content_mask.bounds.size.height.0, 60. * scale);
-            assert!(outline.order > child.order);
+            assert!(
+                (outline.order, outline_index) > (child.order, child_index),
+                "outline must paint above the child"
+            );
         }
     });
 }
