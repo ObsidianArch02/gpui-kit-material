@@ -1,5 +1,5 @@
 //! Analytic intersection of a ripple disk and the button's rounded border box.
-use gpui::{Bounds, Corners, FillOptions, Path, PathBuilder, PathStyle, Pixels, Point, point, px};
+use gpui::{Bounds, Corners, Path, PathBuilder, Pixels, Point, point, px};
 use std::f64::consts::{FRAC_PI_2, TAU};
 
 const EPS: f64 = 1e-7;
@@ -166,7 +166,7 @@ impl RoundedRect {
 
     // Exact exterior distance and signed interior containment. Because GPUI
     // limits every radius to half the shorter side, a corner arc never leaves
-    // its quadrant; only that quadrant's radius affects exterior projection.
+    // its quadrant; only that quadrant's radius affects exterior distance.
     fn distance(&self, p: XY) -> f64 {
         let radius = self.radius_at(p);
         let x =
@@ -174,22 +174,6 @@ impl RoundedRect {
         let y =
             (p[1] - (self.top + self.bottom) / 2.).abs() - (self.bottom - self.top) / 2. + radius;
         x.max(0.).hypot(y.max(0.)) + x.max(y).min(0.) - radius
-    }
-
-    fn project(&self, p: XY) -> XY {
-        if self.distance(p) <= 0. {
-            return p;
-        }
-        let radius = self.radius_at(p);
-        let core = [
-            p[0].clamp(self.left + radius, self.right - radius),
-            p[1].clamp(self.top + radius, self.bottom - radius),
-        ];
-        let scale = radius / distance(core, p);
-        [
-            core[0] + (p[0] - core[0]) * scale,
-            core[1] + (p[1] - core[1]) * scale,
-        ]
     }
 
     fn edges(&self) -> Vec<Edge> {
@@ -245,6 +229,26 @@ fn split_inside(
     }
 }
 
+/// A piece of the clip outline, from where the previous one ended.
+#[derive(Clone, Copy, Debug)]
+enum Segment {
+    Line {
+        to: XY,
+    },
+    /// A quadratic Bézier to `to` with control point `ctrl`.
+    Quad {
+        ctrl: XY,
+        to: XY,
+    },
+}
+
+/// The closed outline of the ripple intersection: a start point and the
+/// segments that return to it.
+struct Outline {
+    start: XY,
+    segments: Vec<Segment>,
+}
+
 /// Build the filled ripple intersection, preserving circular outline segments.
 /// Degenerate or invalid inputs have no painted area.
 pub(super) fn paint_path(
@@ -252,7 +256,31 @@ pub(super) fn paint_path(
     corners: Corners<Pixels>,
     center: Point<Pixels>,
     radius: Pixels,
-) -> Option<Path<Pixels>> {
+) -> Option<Path> {
+    let outline = outline(bounds, corners, center, radius)?;
+    let to_point = |p: XY| point(px(p[0] as f32), px(p[1] as f32));
+    let mut builder = PathBuilder::fill();
+    builder.move_to(to_point(outline.start));
+    for segment in outline.segments {
+        match segment {
+            Segment::Line { to } => builder.line_to(to_point(to)),
+            Segment::Quad { ctrl, to } => builder.curve_to(to_point(to), to_point(ctrl)),
+        }
+    }
+    builder.close();
+    builder.build().ok()
+}
+
+/// The ripple intersection's outline. Arcs become quadratic Béziers of at most
+/// π/24 each, with the control point where the tangents at its ends meet: such a
+/// curve stays within r·(π/48)⁴/8 of the circle (under 0.001 px at a 200 px
+/// radius), and GPUI fills it analytically, without tessellating.
+fn outline(
+    bounds: Bounds<Pixels>,
+    corners: Corners<Pixels>,
+    center: Point<Pixels>,
+    radius: Pixels,
+) -> Option<Outline> {
     let [left, top, width, height, x, y, radius] = [
         bounds.origin.x,
         bounds.origin.y,
@@ -350,63 +378,34 @@ pub(super) fn paint_path(
         };
         angle(a).total_cmp(&angle(b))
     });
-    let to_point = |p: XY| point(px(p[0] as f32), px(p[1] as f32));
-    let mut builder = PathBuilder::fill()
-        .with_style(PathStyle::Fill(FillOptions::default().with_tolerance(0.01)));
-    builder.move_to(to_point(pieces[0].at(0.)));
+    let start = pieces[0].at(0.);
+    let mut segments = Vec::new();
     for edge in pieces {
         match edge {
-            Edge::Line { end, .. } => builder.line_to(to_point(end)),
-            Edge::Arc { radius, sweep, .. } => {
-                // Lyon converts SVG arcs to quadratic curves. Short circular arcs
-                // keep that conversion's outward error below a subpixel, while
-                // preserving analytic arc geometry instead of polygon clipping.
-                let steps = (sweep / (std::f64::consts::PI / 24.)).ceil() as usize;
-                for step in 1..=steps {
-                    builder.arc_to(
-                        point(px(radius as f32), px(radius as f32)),
-                        px(0.),
-                        false,
-                        true,
-                        to_point(edge.at(step as f64 / steps as f64)),
-                    );
+            Edge::Line { end, .. } => segments.push(Segment::Line { to: end }),
+            Edge::Arc {
+                center,
+                radius,
+                start,
+                sweep,
+            } => {
+                let steps = (sweep / (std::f64::consts::PI / 24.)).ceil().max(1.) as usize;
+                let step = sweep / steps as f64;
+                let reach = radius / (step / 2.).cos();
+                for i in 0..steps {
+                    let middle = start + step * (i as f64 + 0.5);
+                    segments.push(Segment::Quad {
+                        ctrl: [
+                            center[0] + reach * middle.cos(),
+                            center[1] + reach * middle.sin(),
+                        ],
+                        to: edge.at((i + 1) as f64 / steps as f64),
+                    });
                 }
             }
         }
     }
-    builder.close();
-    let mut path = builder.build().ok()?;
-    if path.vertices.is_empty() {
-        return None;
-    }
-    // Tessellation can slightly move arc endpoints (even beyond the requested
-    // tolerance). Project those vertices back onto the analytic convex intersection.
-    // A nearest boundary point lies on either outline or at an outline crossing.
-    for vertex in &mut path.vertices {
-        let p = [
-            f64::from(f32::from(vertex.xy_position.x)),
-            f64::from(f32::from(vertex.xy_position.y)),
-        ];
-        if rect.distance(p) <= 0. && distance(p, center) <= radius {
-            continue;
-        }
-        let d = distance(p, center);
-        let scale = if d > radius { radius / d } else { 1. };
-        let on_circle = [
-            center[0] + (p[0] - center[0]) * scale,
-            center[1] + (p[1] - center[1]) * scale,
-        ];
-        let candidates = [rect.project(p), on_circle];
-        if let Some(nearest) = candidates
-            .iter()
-            .chain(crossings.iter())
-            .filter(|q| rect.distance(**q) <= EPS && distance(**q, center) <= radius + EPS)
-            .min_by(|a, b| distance(**a, p).total_cmp(&distance(**b, p)))
-        {
-            vertex.xy_position = to_point(*nearest);
-        }
-    }
-    Some(path)
+    Some(Outline { start, segments })
 }
 
 #[cfg(test)]
@@ -414,13 +413,60 @@ mod tests {
     use super::*;
     use gpui::size;
 
+    /// The outline handed to GPUI, checking that a path is built exactly when
+    /// there is one.
+    fn clip(
+        bounds: Bounds<Pixels>,
+        corners: Corners<Pixels>,
+        center: Point<Pixels>,
+        radius: Pixels,
+    ) -> Option<Outline> {
+        let outline = outline(bounds, corners, center, radius);
+        assert_eq!(
+            outline.is_some(),
+            super::paint_path(bounds, corners, center, radius).is_some()
+        );
+        outline
+    }
+
     fn paint_path(
         bounds: Bounds<Pixels>,
         corner: Pixels,
         center: Point<Pixels>,
         radius: Pixels,
-    ) -> Option<Path<Pixels>> {
-        super::paint_path(bounds, Corners::all(corner), center, radius)
+    ) -> Option<Outline> {
+        clip(bounds, Corners::all(corner), center, radius)
+    }
+
+    fn cross(a: XY, b: XY) -> f64 {
+        a[0] * b[1] - a[1] * b[0]
+    }
+
+    /// Points along the outline: every segment end and, on each curve, seven
+    /// points between.
+    fn points(outline: &Outline) -> Vec<XY> {
+        let mut from = outline.start;
+        let mut points = vec![from];
+        for segment in &outline.segments {
+            match *segment {
+                Segment::Line { to } => {
+                    points.push(to);
+                    from = to;
+                }
+                Segment::Quad { ctrl, to } => {
+                    for k in 1..=8 {
+                        let t = k as f64 / 8.;
+                        let (a, b, c) = ((1. - t) * (1. - t), 2. * t * (1. - t), t * t);
+                        points.push([
+                            a * from[0] + b * ctrl[0] + c * to[0],
+                            a * from[1] + b * ctrl[1] + c * to[1],
+                        ]);
+                    }
+                    from = to;
+                }
+            }
+        }
+        points
     }
 
     fn bounds() -> Bounds<Pixels> {
@@ -446,29 +492,24 @@ mod tests {
         );
     }
 
-    fn area(path: &Path<Pixels>) -> f64 {
-        path.vertices
-            .as_chunks::<3>()
-            .0
-            .iter()
-            .map(|triangle| {
-                let p = triangle
-                    .iter()
-                    .map(|v| {
-                        [
-                            f64::from(f32::from(v.xy_position.x)),
-                            f64::from(f32::from(v.xy_position.y)),
-                        ]
-                    })
-                    .collect::<Vec<_>>();
-                ((p[1][0] - p[0][0]) * (p[2][1] - p[0][1])
-                    - (p[1][1] - p[0][1]) * (p[2][0] - p[0][0]))
-                    .abs()
-                    / 2.
-            })
-            .sum()
+    /// The outline's exact enclosed area (Green's theorem over lines and
+    /// quadratic Béziers).
+    fn area(outline: &Outline) -> f64 {
+        let mut from = outline.start;
+        let mut twice = 0.;
+        for segment in &outline.segments {
+            twice += match *segment {
+                Segment::Line { to } => cross(from, to),
+                Segment::Quad { ctrl, to } => {
+                    (2. * (cross(from, ctrl) + cross(ctrl, to)) + cross(from, to)) / 3.
+                }
+            };
+            from = match *segment {
+                Segment::Line { to } | Segment::Quad { to, .. } => to,
+            };
+        }
+        (twice / 2.).abs()
     }
-
     #[test]
     fn intersection_retains_the_expected_area() {
         let b = bounds();
@@ -500,23 +541,19 @@ mod tests {
                 top_left: px(raw[3]),
             };
             let radii = raw.map(|r| f64::from(r.clamp(0., 20.)));
-            let whole = super::paint_path(b, corners, b.center(), px(200.)).unwrap();
+            let whole = clip(b, corners, b.center(), px(200.)).unwrap();
             let expected = 120. * 40.
                 - (1. - std::f64::consts::PI / 4.) * radii.iter().map(|r| r * r).sum::<f64>();
             assert!((area(&whole) - expected).abs() < 3.);
             for center in [[10., 20.], [130., 20.], [130., 60.], [10., 60.], [70., 40.]] {
                 for radius in [5., 20., 35., 200.] {
-                    if let Some(path) = super::paint_path(
+                    if let Some(path) = clip(
                         b,
                         corners,
                         point(px(center[0] as f32), px(center[1] as f32)),
                         px(radius as f32),
                     ) {
-                        for vertex in path.vertices {
-                            let p = [
-                                f64::from(f32::from(vertex.xy_position.x)),
-                                f64::from(f32::from(vertex.xy_position.y)),
-                            ];
+                        for p in points(&path) {
                             assert!((10. - 0.001..=130. + 0.001).contains(&p[0]));
                             assert!((20. - 0.001..=60. + 0.001).contains(&p[1]));
                             assert!(distance(p, center) <= radius + 0.001);
@@ -543,9 +580,9 @@ mod tests {
             top_left: px(f32::NAN),
             ..Corners::all(px(0.))
         };
-        assert!(super::paint_path(b, invalid, b.center(), px(20.)).is_none());
+        assert!(clip(b, invalid, b.center(), px(20.)).is_none());
         let zero = Bounds::new(b.origin, size(px(0.), px(40.)));
-        assert!(super::paint_path(zero, Corners::all(px(200.)), b.center(), px(20.)).is_none());
+        assert!(clip(zero, Corners::all(px(200.)), b.center(), px(20.)).is_none());
     }
 
     #[test]
@@ -575,11 +612,7 @@ mod tests {
                         px(radius as f32),
                     );
                     if let Some(path) = path {
-                        for vertex in path.vertices {
-                            let p = [
-                                f64::from(f32::from(vertex.xy_position.x)),
-                                f64::from(f32::from(vertex.xy_position.y)),
-                            ];
+                        for p in points(&path) {
                             assert!(
                                 rect.distance(p) <= 0.001,
                                 "outside rounded rect: {p:?}, center={center:?}, radius={radius}, corner={corner}"
@@ -618,8 +651,7 @@ mod tests {
                 bottom_left: px(raw[2]),
                 top_left: px(raw[3]),
             };
-            let path =
-                super::paint_path(b, corners, point(px(center[0]), px(center[1])), px(radius));
+            let path = clip(b, corners, point(px(center[0]), px(center[1])), px(radius));
             let [cx, cy] = center.map(f64::from);
             let r = f64::from(radius);
             let mut expected = 0.;
@@ -654,7 +686,12 @@ mod tests {
                 "case={case}, radii={radii:?}, center={center:?}, radius={radius}, actual={actual}, expected={expected}"
             );
             if let Some(path) = path {
-                assert!(path.vertices.iter().all(|v| v.st_position == point(0., 1.)));
+                // One closed contour: the last segment ends where the first began.
+                let end = match path.segments.last() {
+                    Some(Segment::Line { to } | Segment::Quad { to, .. }) => *to,
+                    None => panic!("an outline without segments"),
+                };
+                assert!(distance(end, path.start) < 1e-6, "case={case}");
             }
         }
     }

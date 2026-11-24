@@ -101,14 +101,6 @@ fn editor_style(caret: Hsla, selection: Hsla, cx: &App) -> InputEditorStyle {
     }
 }
 
-#[cfg(not(feature = "gpui-fast"))]
-impl<M: InputModeKind> IntoElement for CaretReport<M> {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 impl<M: InputModeKind> Element for CaretReport<M> {
     type RequestLayoutState = ();
     type PrepaintState = ();

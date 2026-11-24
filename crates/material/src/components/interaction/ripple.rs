@@ -343,13 +343,6 @@ impl ButtonRipple {
         self
     }
 }
-#[cfg(not(feature = "gpui-fast"))]
-impl IntoElement for ButtonRipple {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
 impl Element for ButtonRipple {
     type RequestLayoutState = ();
     type PrepaintState = Hitbox;

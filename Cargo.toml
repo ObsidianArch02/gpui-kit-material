@@ -4,7 +4,7 @@ members = ["crates/color", "crates/material", "crates/gallery", "crates/gallery-
 exclude = ["vendor/gpui-kit", "vendor/gpui-pre", "vendor/gpui-pre-web", "vendor/gpui-pre-apple", "vendor/gpui-fast", "vendor/gpui-fast-apple"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.98"
@@ -16,10 +16,10 @@ gpui-kit-material-color = { path = "crates/color", version = "0.1.1", default-fe
 
 # Kit owns application initialization and the Component layer; GPUI and Base must be
 # shared, so Base is the same release.
-gpui-kit = "0.10.0"
+gpui-kit = "0.11.0"
 # Base supplies presentation capabilities not exposed by Component; Kit selects
 # its engine backend along with the facade's public types.
-gpui-base = "0.10.0"
+gpui-base = "0.11.0"
 
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
@@ -43,7 +43,7 @@ lto = "fat"
 codegen-units = 1
 
 [patch.crates-io]
-# Kit 0.10.0's source with a manifest that keeps WASM single-threaded by default
+# Kit 0.11.0's source with a manifest that keeps WASM single-threaded by default
 # (vendor/gpui-kit/SOURCE.md); Symbols' `gpui-kit` is this one too.
 gpui-kit = { path = "vendor/gpui-kit" }
 # The engine's remaining local patches, for this workspace (docs/ARCHITECTURE.md).

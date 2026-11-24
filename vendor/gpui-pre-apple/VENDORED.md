@@ -1,10 +1,10 @@
 # Source
 
-This directory vendors `gpui-pre-apple` 0.3.12 from crates.io:
-<https://crates.io/crates/gpui-pre-apple/0.3.12>.
+This directory vendors `gpui-pre-apple` 0.3.14 from crates.io:
+<https://crates.io/crates/gpui-pre-apple/0.3.14>.
 
 Published archive SHA-256:
-`a460605ec4e8cbcc9b213462a84b1d6cc3efe4ed8f0e18669659f07b2d5c6aec`.
+`1f1a823038fb3da6b9661135f5f8a5d8954c6ab1bda0670185485a13291087aa`.
 The upstream Apache 2.0 license is retained in `LICENSE-APACHE`. The nested
 `vendor/gpui` source is part of the published crate and supplies Metal shader
 build definitions.

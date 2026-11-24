@@ -7,6 +7,43 @@ commit messages.
 
 Nothing yet.
 
+## gpui-kit-material 0.3.0 (2026-11-24)
+
+`gpui-kit-material` 0.3.0 follows `gpui-kit` 0.11.0 (with `gpui-base` 0.11.0, `gpui-fast`
+0.1.19 and `gpui-pre` 0.3.14) and `gpui-material-symbols` 0.3.0. It requires
+`gpui-kit-material-color` 0.1.1 (unchanged, so not released again). Kit 0.11 is a minor
+release with breaking API changes, so this is one too.
+
+### Changed
+
+- Depend on `gpui-kit = "0.11.0"`; Kit 0.10 is no longer supported. Update your own
+  `gpui-kit` dependency with this release so that one Kit, Base and GPUI resolve. Kit's
+  Linux X11 backend is now its default `x11` feature: if you turn off Kit's default
+  features and still run on X11, ask for it.
+- Icons come from `gpui-material-symbols` 0.3, the Symbols release on Kit 0.11.
+- The date and time pickers use `jiff` 1.0 instead of `chrono`, as Base's calendar and
+  time field now do. `components` (and the prelude) re-export `jiff::civil::{Date, Time,
+  Weekday}` in place of `chrono`'s `NaiveDate`, `NaiveTime`, `Weekday`, `Datelike` and
+  `Timelike`: `DatePickerState`, `DateSelection`, `DateMatcher`, `DatePickerLabels`'
+  formatters, `TimePickerState` and `TimePicker::on_confirm` take and give jiff types,
+  and `today()` returns a `jiff::civil::Date`. Weekdays are named in full
+  (`Weekday::Sunday`), and `month_weeks`, `first_of_month` and the pickers' year and
+  month methods still take `i32` years and `u32` months.
+- With the `gpui-fast` feature, `gpui-fast` is pinned to `=0.1.19` (was `=0.1.16`), the
+  release Kit 0.11.0 builds with. `gpui-pre` now implements `IntoElement` for every
+  `Element` too, so drop your own `impl IntoElement for X` on element types on both
+  backends; `Path` is no longer generic (Kit 0.11's release notes).
+- The consumer patch set in docs/ARCHITECTURE.md moves to this release's revision, with
+  the engine patches rebased onto gpui-fast 0.1.19 and gpui-pre 0.3.14. Upstream now has
+  the lazy tab-stop index on gpui-pre, so that patch is gone.
+
+### Unchanged
+
+- Button ripples stay clipped to the button's rounded shape. GPUI now fills paths
+  analytically, without tessellating, so the clip hands GPUI its outline as curves
+  rather than correcting tessellated vertices; the outline stays within 0.001 px of the
+  circle for a 200 px ripple.
+
 ## gpui-kit-material 0.2.0 (2026-11-18)
 
 `gpui-kit-material` 0.2.0 follows `gpui-kit` 0.10.0 (with `gpui-base` 0.10.0, `gpui-fast`

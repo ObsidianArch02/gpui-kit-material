@@ -422,8 +422,8 @@ impl PullToRefresh {
 #[derive(Default)]
 struct ArrowPaths {
     key: Option<(u32, Bounds<Pixels>)>,
-    arc: Option<Path<Pixels>>,
-    head: Option<Path<Pixels>>,
+    arc: Option<Path>,
+    head: Option<Path>,
 }
 
 impl ArrowPaths {
@@ -442,10 +442,7 @@ impl ArrowPaths {
 }
 
 /// Build the arrow's arc and head for `bounds`.
-fn arrow_paths(
-    fraction: f32,
-    bounds: Bounds<Pixels>,
-) -> (Option<Path<Pixels>>, Option<Path<Pixels>>) {
+fn arrow_paths(fraction: f32, bounds: Bounds<Pixels>) -> (Option<Path>, Option<Path>) {
     let scale = f32::from(bounds.size.width) / PULL_TO_REFRESH_SPINNER_SIZE;
     let arrow = pull_arrow(fraction, 1.);
     let center = arrow.size / 2.;

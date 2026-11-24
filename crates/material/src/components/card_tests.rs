@@ -68,10 +68,11 @@ fn edge_child_is_clipped_and_refined_outline_paints_above_it(cx: &mut TestAppCon
     cx.update(|window, _| {
         let scale = window.scale_factor();
         let quads = window.painted_quads();
-        let outline = quads
+        let outline_index = quads
             .iter()
-            .find(|q| q.border_widths.top.0 == scale)
+            .position(|q| q.border_widths.top.0 == scale)
             .expect("outline");
+        let outline = &quads[outline_index];
         assert_eq!(outline.bounds.size.width.0, 80. * scale);
         assert_eq!(outline.bounds.size.height.0, 60. * scale);
         assert_eq!(outline.corner_radii.top_left.0, 6. * scale);
@@ -109,13 +110,20 @@ fn edge_child_is_clipped_and_refined_outline_paints_above_it(cx: &mut TestAppCon
         {
             // Upstream has rectangular overflow only; do not claim rounded
             // clipping. Still verify its actual child mask and outline order.
-            let child = quads
+            // Overlapping quads may share a draw order; the renderer draws
+            // those in the scene's sorted (stable, paint) order, so compare
+            // the order and then the position in the sorted quads.
+            let child_index = quads
                 .iter()
-                .find(|q| q.bounds.origin.x.0 == -10. * scale)
+                .position(|q| q.bounds.origin.x.0 == -10. * scale)
                 .expect("child quad");
+            let child = &quads[child_index];
             assert_eq!(child.content_mask.bounds.size.width.0, 80. * scale);
             assert_eq!(child.content_mask.bounds.size.height.0, 60. * scale);
-            assert!(outline.order > child.order);
+            assert!(
+                (outline.order, outline_index) > (child.order, child_index),
+                "outline must paint above the child"
+            );
         }
     });
 }
@@ -525,9 +533,18 @@ fn rounded_card(cx: &mut TestAppContext, clip: bool) -> (f32, gpui::Bounds<f32>,
     cx.update(|window, _| {
         let scale = window.scale_factor();
         let quads = window.painted_quads();
+        // GPUI Fast paints a rounded quad in pieces, each under its own mask: a
+        // square interior and the rounded strips along its edges. The fill's
+        // radius is the one its rounded pieces carry.
         let fill = quads
             .iter()
-            .find(|q| q.bounds.size.width.0 == 100. * scale && !q.background.is_transparent())
+            .filter(|q| q.bounds.size.width.0 == 100. * scale && !q.background.is_transparent())
+            .max_by(|a, b| {
+                a.corner_radii
+                    .top_left
+                    .0
+                    .total_cmp(&b.corner_radii.top_left.0)
+            })
             .expect("the card's fill");
         let ring = quads
             .iter()
@@ -637,9 +654,18 @@ fn a_fixed_height_cards_surface_clips_its_content_to_the_card(cx: &mut TestAppCo
     cx.update(|window, _| {
         let scale = window.scale_factor();
         let quads = window.painted_quads();
+        // GPUI Fast paints a rounded quad in pieces, each under its own mask: a
+        // square interior and the rounded strips along its edges. The fill's
+        // radius is the one its rounded pieces carry.
         let fill = quads
             .iter()
-            .find(|q| q.bounds.size.width.0 == 100. * scale && !q.background.is_transparent())
+            .filter(|q| q.bounds.size.width.0 == 100. * scale && !q.background.is_transparent())
+            .max_by(|a, b| {
+                a.corner_radii
+                    .top_left
+                    .0
+                    .total_cmp(&b.corner_radii.top_left.0)
+            })
             .expect("the card's fill");
         assert_eq!(
             fill.bounds.size.height.0,

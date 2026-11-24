@@ -30,23 +30,23 @@ fn short_month(month: u32) -> &'static str {
     &MONTHS[(month as usize + 11) % 12][..3]
 }
 
-fn date(y: i32, m: u32, d: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(y, m, d).expect("a valid gallery date")
+fn date(y: i16, m: i8, d: i8) -> Date {
+    Date::new(y, m, d).expect("a valid gallery date")
 }
 
 /// English date picker strings.
 fn date_labels(range: bool) -> DatePickerLabels {
     let s = SharedString::new_static;
-    let headline = |d: NaiveDate| -> SharedString {
+    let headline = |d: Date| -> SharedString {
         format!(
             "{}, {} {}",
-            WEEKDAYS[d.weekday().num_days_from_monday() as usize],
-            short_month(d.month()),
+            WEEKDAYS[d.weekday().to_monday_zero_offset() as usize],
+            short_month(d.month() as u32),
             d.day()
         )
         .into()
     };
-    let short = |d: NaiveDate| format!("{} {}", short_month(d.month()), d.day());
+    let short = |d: Date| format!("{} {}", short_month(d.month() as u32), d.day());
     DatePickerLabels {
         title: if range {
             s("Depart - Return dates")
@@ -82,28 +82,28 @@ fn date_labels(range: bool) -> DatePickerLabels {
         input_placeholder: s("mm/dd/yyyy"),
         invalid_input: s("Use mm/dd/yyyy"),
         weekday: Rc::new(|w: Weekday| {
-            ["S", "M", "T", "W", "T", "F", "S"][w.num_days_from_sunday() as usize].into()
+            ["S", "M", "T", "W", "T", "F", "S"][w.to_sunday_zero_offset() as usize].into()
         }),
         month: Rc::new(|m| MONTHS[(m as usize + 11) % 12].into()),
         month_short: Rc::new(|m| short_month(m).into()),
         month_year: Rc::new(|y, m| format!("{} {y}", MONTHS[(m as usize + 11) % 12]).into()),
         headline: Rc::new(headline),
         range_headline: Rc::new(move |a, b| {
-            let part = |d: Option<NaiveDate>, empty: &str| d.map(short).unwrap_or(empty.into());
+            let part = |d: Option<Date>, empty: &str| d.map(short).unwrap_or(empty.into());
             format!("{} – {}", part(a, "Start date"), part(b, "End date")).into()
         }),
-        accessible_date: Rc::new(|d: NaiveDate| {
+        accessible_date: Rc::new(|d: Date| {
             format!(
                 "{} {} {}, {}",
-                WEEKDAYS[d.weekday().num_days_from_monday() as usize],
-                MONTHS[d.month0() as usize],
+                WEEKDAYS[d.weekday().to_monday_zero_offset() as usize],
+                MONTHS[d.month() as usize - 1],
                 d.day(),
                 d.year()
             )
             .into()
         }),
         number: Rc::new(|n| n.to_string().into()),
-        format_input: Rc::new(|d: NaiveDate| {
+        format_input: Rc::new(|d: Date| {
             format!("{:02}/{:02}/{}", d.month(), d.day(), d.year()).into()
         }),
         parse_input: Rc::new(|text| {
@@ -112,7 +112,7 @@ fn date_labels(range: bool) -> DatePickerLabels {
             if parts.next().is_some() || y < 1000 {
                 return None;
             }
-            NaiveDate::from_ymd_opt(y as i32, m, d)
+            Date::new(y.try_into().ok()?, m.try_into().ok()?, d.try_into().ok()?).ok()
         }),
     }
 }
@@ -138,7 +138,7 @@ fn time_labels() -> TimePickerLabels {
 }
 
 /// The kit's fixed "today" (August 5, 2025) for specimens.
-fn kit_today() -> NaiveDate {
+fn kit_today() -> Date {
     date(2025, 8, 5)
 }
 
@@ -208,8 +208,8 @@ impl GalleryPage for Page {
             date_state(false, &|s| s.selection(aug17).view(DatePickerView::Month)),
             date_state(false, &|s| s.selection(aug17).view(DatePickerView::Year)),
         ];
-        let seven = NaiveTime::from_hms_opt(7, 0, 0).expect("valid time");
-        let twenty = NaiveTime::from_hms_opt(20, 0, 0).expect("valid time");
+        let seven = Time::new(7, 0, 0, 0).expect("valid time");
+        let twenty = Time::new(20, 0, 0, 0).expect("valid time");
         let mut dials = Vec::new();
         for (time, format, input) in [
             (seven, TimeFormat::TwelveHour, false),
@@ -225,14 +225,14 @@ impl GalleryPage for Page {
                 if input { state.input_mode() } else { state }
             }));
         }
-        let real_today = chrono_today();
+        let real_today = local_today();
         let start = cx.new(|cx| InputState::new(window, cx));
         let end = cx.new(|cx| InputState::new(window, cx));
         let single = cx.new(|cx| InputState::new(window, cx));
         let live_date = cx.new(|cx| {
             DatePickerState::new(date_labels(false), real_today, cx)
-                .disabled_dates(DateMatcher::custom(|d: &NaiveDate| {
-                    d.weekday() == Weekday::Sun
+                .disabled_dates(DateMatcher::custom(|d: &Date| {
+                    d.weekday() == Weekday::Sunday
                 }))
                 .with_inputs(single, None, cx)
         });
@@ -242,7 +242,7 @@ impl GalleryPage for Page {
                 .with_inputs(start, Some(end), cx)
         });
         let live_docked = cx.new(|cx| DatePickerState::new(date_labels(false), real_today, cx));
-        let now = NaiveTime::from_hms_opt(9, 41, 0).expect("valid time");
+        let now = Time::new(9, 41, 0, 0).expect("valid time");
         let live_time = cx.new(|cx| TimePickerState::new(time_labels(), now, window, cx));
         let live_inline_time = cx.new(|cx| {
             TimePickerState::new(time_labels(), now, window, cx).format(
@@ -365,7 +365,7 @@ impl GalleryPage for Page {
     }
 }
 
-fn chrono_today() -> NaiveDate {
+fn local_today() -> Date {
     gpui_kit_material::components::today()
 }
 
@@ -430,8 +430,8 @@ fn calendar_blocks() -> AnyElement {
 /// Time picker building blocks: selectors, period selectors and faces.
 fn time_blocks() -> AnyElement {
     let labels = Rc::new(time_labels());
-    let seven = NaiveTime::from_hms_opt(7, 0, 0).expect("valid time");
-    let twenty = NaiveTime::from_hms_opt(20, 0, 0).expect("valid time");
+    let seven = Time::new(7, 0, 0, 0).expect("valid time");
+    let twenty = Time::new(20, 0, 0, 0).expect("valid time");
     let period_states = [
         InteractionPreview::Enabled,
         InteractionPreview::Hovered,
@@ -503,7 +503,7 @@ fn time_blocks() -> AnyElement {
             ClockDial::specimen(
                 "face-minutes",
                 labels,
-                seven.with_minute(7).unwrap_or(seven),
+                seven.with().minute(7).build().unwrap_or(seven),
                 TimeUnit::Minute,
                 TimeFormat::TwelveHour,
             )
@@ -555,9 +555,9 @@ impl Page {
         };
         let confirm_time = {
             let page = page.clone();
-            move |time: NaiveTime, _: &mut Window, cx: &mut App| {
+            move |time: Time, _: &mut Window, cx: &mut App| {
                 page.update(cx, |this, cx| {
-                    this.result = Some(time.format("%H:%M").to_string().into());
+                    this.result = Some(time.strftime("%H:%M").to_string().into());
                     this.open = None;
                     cx.notify();
                 })

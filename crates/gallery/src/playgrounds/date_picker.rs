@@ -160,19 +160,19 @@ fn short_month(month: u32) -> &'static str {
 }
 
 /// An ISO `YYYY-MM-DD` date from a Text control.
-fn iso(text: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(text.trim(), "%Y-%m-%d").ok()
+fn iso(text: &str) -> Option<Date> {
+    Date::strptime("%Y-%m-%d", text.trim()).ok()
 }
 
-fn to_iso(date: Option<NaiveDate>) -> SharedString {
-    date.map(|d| d.format("%Y-%m-%d").to_string().into())
+fn to_iso(date: Option<Date>) -> SharedString {
+    date.map(|d| d.strftime("%Y-%m-%d").to_string().into())
         .unwrap_or_default()
 }
 
 /// English date picker strings in date format `format`.
 fn labels(range: bool, format: DateFormat) -> DatePickerLabels {
     let s = SharedString::new_static;
-    let short = |d: NaiveDate| format!("{} {}", short_month(d.month()), d.day());
+    let short = |d: Date| format!("{} {}", short_month(d.month() as u32), d.day());
     let hint = SharedString::new_static(
         FORMATS[DATE_FORMATS
             .iter()
@@ -214,29 +214,29 @@ fn labels(range: bool, format: DateFormat) -> DatePickerLabels {
         input_placeholder: hint.clone(),
         invalid_input: format!("Use {hint}").into(),
         weekday: Rc::new(|w: Weekday| {
-            ["S", "M", "T", "W", "T", "F", "S"][w.num_days_from_sunday() as usize].into()
+            ["S", "M", "T", "W", "T", "F", "S"][w.to_sunday_zero_offset() as usize].into()
         }),
         month: Rc::new(|m| MONTHS[(m as usize + 11) % 12].into()),
         month_short: Rc::new(|m| short_month(m).into()),
         month_year: Rc::new(|y, m| format!("{} {y}", MONTHS[(m as usize + 11) % 12]).into()),
-        headline: Rc::new(|d: NaiveDate| {
+        headline: Rc::new(|d: Date| {
             format!(
                 "{}, {} {}",
-                WEEKDAYS[d.weekday().num_days_from_monday() as usize],
-                short_month(d.month()),
+                WEEKDAYS[d.weekday().to_monday_zero_offset() as usize],
+                short_month(d.month() as u32),
                 d.day()
             )
             .into()
         }),
         range_headline: Rc::new(move |a, b| {
-            let part = |d: Option<NaiveDate>, empty: &str| d.map(short).unwrap_or(empty.into());
+            let part = |d: Option<Date>, empty: &str| d.map(short).unwrap_or(empty.into());
             format!("{} – {}", part(a, "Start date"), part(b, "End date")).into()
         }),
-        accessible_date: Rc::new(|d: NaiveDate| {
+        accessible_date: Rc::new(|d: Date| {
             format!(
                 "{} {} {}, {}",
-                WEEKDAYS[d.weekday().num_days_from_monday() as usize],
-                MONTHS[d.month0() as usize],
+                WEEKDAYS[d.weekday().to_monday_zero_offset() as usize],
+                MONTHS[d.month() as usize - 1],
                 d.day(),
                 d.year()
             )
@@ -263,7 +263,7 @@ struct Build {
     view: usize,
     input: bool,
     docked: bool,
-    limits: Option<(NaiveDate, NaiveDate)>,
+    limits: Option<(Date, Date)>,
 }
 
 /// The selection the configuration describes.
@@ -309,36 +309,37 @@ fn build(
                 .then(|| cx.new(|cx| InputState::new(window, cx))),
         )
     });
-    let state =
-        cx.new(|cx| {
-            let mut state = DatePickerState::new(labels(build.range, build.format), today(), cx);
-            if build.range {
-                state = state.range();
-            }
-            if let Some((earliest, latest)) = build.limits {
-                state = state.years(earliest.year()..=latest.year()).disabled_dates(
-                    DateMatcher::custom(move |d: &NaiveDate| *d < earliest || *d > latest),
-                );
-            }
+    let state = cx.new(|cx| {
+        let mut state = DatePickerState::new(labels(build.range, build.format), today(), cx);
+        if build.range {
+            state = state.range();
+        }
+        if let Some((earliest, latest)) = build.limits {
             state = state
-                .selection(value)
-                .close_on_selection(close_on_selection);
-            // Month is the docked picker's list; the modal shows the year grid.
-            state = match (build.view, build.docked) {
-                (1, true) => state.view(DatePickerView::Month),
-                (1, false) | (2, _) => state.view(DatePickerView::Year),
-                _ => state,
-            };
-            if let Some((start, end)) = inputs {
-                if let Some(d) = value.start() {
-                    start.update(cx, |input, cx| {
-                        input.set_value(build.format.format(d), window, cx)
-                    });
-                }
-                state = state.input_mode().with_inputs(start, end, cx);
+                .years(i32::from(earliest.year())..=i32::from(latest.year()))
+                .disabled_dates(DateMatcher::custom(move |d: &Date| {
+                    *d < earliest || *d > latest
+                }));
+        }
+        state = state
+            .selection(value)
+            .close_on_selection(close_on_selection);
+        // Month is the docked picker's list; the modal shows the year grid.
+        state = match (build.view, build.docked) {
+            (1, true) => state.view(DatePickerView::Month),
+            (1, false) | (2, _) => state.view(DatePickerView::Year),
+            _ => state,
+        };
+        if let Some((start, end)) = inputs {
+            if let Some(d) = value.start() {
+                start.update(cx, |input, cx| {
+                    input.set_value(build.format.format(d), window, cx)
+                });
             }
-            state
-        });
+            state = state.input_mode().with_inputs(start, end, cx);
+        }
+        state
+    });
     let picker = picker.clone();
     cx.subscribe_in(
         &state,
@@ -528,15 +529,10 @@ fn preview(
         .into_any_element()
 }
 
-/// `date` as the Rust expression for an `Option<NaiveDate>`.
-fn date_code(date: Option<NaiveDate>) -> String {
+/// `date` as the Rust expression for an `Option<Date>`.
+fn date_code(date: Option<Date>) -> String {
     match date {
-        Some(d) => format!(
-            "NaiveDate::from_ymd_opt({}, {}, {})",
-            d.year(),
-            d.month(),
-            d.day()
-        ),
+        Some(d) => format!("Date::new({}, {}, {}).ok()", d.year(), d.month(), d.day()),
         None => "None".into(),
     }
 }
@@ -578,7 +574,7 @@ fn code(config: &Config) -> String {
             limits.map(|(earliest, latest)| format!("years({}..={})", earliest.year(), latest.year())),
             limits.map(|(earliest, latest)| {
                 format!(
-                    "disabled_dates(DateMatcher::custom(|date: &NaiveDate| {{\n    Some(*date) < {} || Some(*date) > {}\n}}))",
+                    "disabled_dates(DateMatcher::custom(|date: &Date| {{\n    Some(*date) < {} || Some(*date) > {}\n}}))",
                     date_code(Some(earliest)),
                     date_code(Some(latest))
                 )
@@ -657,7 +653,7 @@ mod tests {
 
     #[test]
     fn iso_controls_round_trip() {
-        let d = NaiveDate::from_ymd_opt(2025, 8, 17).unwrap();
+        let d = Date::new(2025, 8, 17).unwrap();
         assert_eq!(iso("2025-08-17"), Some(d));
         assert_eq!(to_iso(Some(d)), "2025-08-17");
     }
@@ -702,10 +698,7 @@ mod tests {
         let code = super::code(&config);
         assert!(code.starts_with("// Once"), "{code}");
         assert!(code.contains("DatePickerState::new(date_picker_labels(), today(), cx)"));
-        assert!(
-            code.contains("NaiveDate::from_ymd_opt(2025, 8, 17)"),
-            "{code}"
-        );
+        assert!(code.contains("Date::new(2025, 8, 17).ok()"), "{code}");
         assert!(code.contains(".docked()"));
         assert!(!code.contains(".range()"));
         config.set("range", Value::Bool(true));

@@ -690,13 +690,6 @@ impl InteractiveElement for CardSurface {
         self.inner.interactivity()
     }
 }
-#[cfg(not(feature = "gpui-fast"))]
-impl IntoElement for CardSurface {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
 impl Element for CardSurface {
     type RequestLayoutState = <Div as Element>::RequestLayoutState;
     type PrepaintState = <Div as Element>::PrepaintState;

@@ -152,6 +152,8 @@ impl Doc<'_> {
     }
 
     /// The quads painted in `color`, in window pixels, from the top of the window.
+    /// GPUI Fast paints a rounded quad in pieces, each under its own mask, all
+    /// with the quad's bounds: each quad is counted once.
     fn quads(&mut self, color: Hsla) -> Vec<Bounds<Pixels>> {
         let background: Background = color.into();
         self.cx.update(|window, _| {
@@ -174,7 +176,12 @@ impl Doc<'_> {
                     )
                 })
                 .collect();
-            quads.sort_by_key(|quad| quad.top());
+            quads.sort_by(|a, b| {
+                (a.top(), a.left(), a.bottom(), a.right())
+                    .partial_cmp(&(b.top(), b.left(), b.bottom(), b.right()))
+                    .unwrap()
+            });
+            quads.dedup();
             quads
         })
     }

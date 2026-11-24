@@ -72,12 +72,21 @@ fn the_bar_paints_a_surface_container_high_pill(cx: &mut TestAppContext) {
         let scale = window.scale_factor();
         let expected = gpui::solid_background(color(ColorRole::SURFACE_CONTAINER_HIGH));
         let quads = window.painted_quads();
+        // GPUI Fast paints a rounded quad in pieces under their own masks (a
+        // square interior and rounded edge strips); the rounded ones carry the
+        // pill's radius.
         let pill = quads
             .iter()
-            .find(|q| {
+            .filter(|q| {
                 q.bounds.size.width.0 == 360. * scale
                     && q.bounds.size.height.0 == 56. * scale
                     && q.background == expected
+            })
+            .max_by(|a, b| {
+                a.corner_radii
+                    .top_left
+                    .0
+                    .total_cmp(&b.corner_radii.top_left.0)
             })
             .expect("the bar paints its container");
         assert_eq!(pill.background, expected);

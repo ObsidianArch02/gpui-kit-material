@@ -569,14 +569,6 @@ impl Raised {
     }
 }
 
-#[cfg(not(feature = "gpui-fast"))]
-impl IntoElement for Raised {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 impl Element for Raised {
     type RequestLayoutState = ();
     type PrepaintState = ();
@@ -632,14 +624,6 @@ impl Element for Raised {
 struct Clipped {
     child: AnyElement,
     mask: Rc<Cell<Option<ContentMask<Pixels>>>>,
-}
-
-#[cfg(not(feature = "gpui-fast"))]
-impl IntoElement for Clipped {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
 }
 
 impl Element for Clipped {

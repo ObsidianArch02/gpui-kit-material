@@ -145,9 +145,9 @@ implicitly.
 ## Engine patches
 
 One GPUI and one Base implementation are shared across Material, Kit and
-Symbols. The library depends on released crates only: `gpui-kit` and `gpui-base` 0.10.0,
-which name `gpui-fast` 0.1.16 or later (the library pins `=0.1.16`, the release it is tested with) and `gpui-pre` 0.3.12; Symbols depends on crates.io
-`gpui-kit` 0.10 too, so a consumer resolves one Kit and its `IconNamed` is Material's.
+Symbols. The library depends on released crates only: `gpui-kit` and `gpui-base` 0.11.0,
+which name `gpui-fast` 0.1.19 or later (the library pins `=0.1.19`, the release it is tested with) and `gpui-pre` 0.3.14; Symbols depends on crates.io
+`gpui-kit` 0.11 too, so a consumer resolves one Kit and its `IconNamed` is Material's.
 The root `[patch.crates-io]` table redirects a few of those crates to `vendor/` for this
 workspace's Gallery. **These patches apply only inside this workspace**, and none is
 needed to build the library (`scripts/check-registry-consumer.sh` builds the package
@@ -162,21 +162,23 @@ one revision:
 
 ```toml
 [dependencies]
-gpui-kit = "0.10.0"
-gpui-kit-material = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "3b20c7031e311e2771ac299b403377c0afba1c76" }
+gpui-kit = "0.11.0"
+gpui-kit-material = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "482720b26b36f6e1682338dfe3c4cda5f93bc76e" }
 
 [patch.crates-io]
-gpui-kit = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "3b20c7031e311e2771ac299b403377c0afba1c76" }
-gpui-pre = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "3b20c7031e311e2771ac299b403377c0afba1c76" }
-gpui-pre-apple = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "3b20c7031e311e2771ac299b403377c0afba1c76" }
-gpui-pre-web = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "3b20c7031e311e2771ac299b403377c0afba1c76" }
-gpui-fast = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "3b20c7031e311e2771ac299b403377c0afba1c76" }
+gpui-kit = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "482720b26b36f6e1682338dfe3c4cda5f93bc76e" }
+gpui-pre = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "482720b26b36f6e1682338dfe3c4cda5f93bc76e" }
+gpui-pre-apple = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "482720b26b36f6e1682338dfe3c4cda5f93bc76e" }
+gpui-pre-web = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "482720b26b36f6e1682338dfe3c4cda5f93bc76e" }
+gpui-fast = { git = "https://github.com/mizorewww/gpui-kit-material", rev = "482720b26b36f6e1682338dfe3c4cda5f93bc76e" }
 ```
 
 `[patch]` is read only from the top-level manifest, so it goes in your workspace root.
-The revision shown is `gpui-kit-material` 0.2.0's source, on Kit 0.10.0 and gpui-fast
-0.1.16, with the same engine patches as 0.1.3: those that moved to Kit 0.9.1 (`98c72b8`)
-and the nested scroll containers' wheel on `gpui-fast`. CI does not build that revision
+The revision shown is `gpui-kit-material` 0.3.0's source, on Kit 0.11.0, gpui-fast
+0.1.19 and gpui-pre 0.3.14, with the engine patches of 0.1.3 (those that moved to Kit
+0.9.1, `98c72b8`, and the nested scroll containers' wheel on `gpui-fast`) apart from the
+ones those releases now contain: the lazy tab-stop index and `try_update` on `gpui-pre`,
+`try_update` on `gpui-fast`. CI does not build that revision
 again, and `scripts/check-package.sh` checks that this block differs from the template CI
 builds (`scripts/git-consumer/Cargo.toml.in`) only in its revision.
 
@@ -189,8 +191,8 @@ releases lack.
 
 | Consumer crate | Why a consumer may want it |
 | --- | --- |
-| `gpui-kit` | Kit 0.10.0's unchanged source with a normalized manifest that keeps WASM single-threaded by default (`multithreaded-web` restores upstream's workers); published Kit selects its Web platforms' default `multithreaded` feature. |
-| `gpui-pre`, `gpui-fast` | Spaces that overflow a wrapped row hang instead of starting the next one (upstream lacks this). On `gpui-pre`, a `measure_all` list measures its off-screen items over later frames after a width change, so a long `TextView` resizes without laying out every block per frame (gpui-fast 0.1.15 has it upstream). On `gpui-fast`, a wheel over nested scroll containers scrolls only the innermost one it moves, for the whole gesture, instead of every container under the pointer. `gpui-pre` also keeps the lazy tab-stop index and `em` metrics for fonts without `m`, which gpui-fast 0.1.14 has upstream. |
+| `gpui-kit` | Kit 0.11.0's unchanged source with a normalized manifest that keeps WASM single-threaded by default (`multithreaded-web` restores upstream's workers); published Kit selects its Web platforms' default `multithreaded` feature. |
+| `gpui-pre`, `gpui-fast` | Spaces that overflow a wrapped row hang instead of starting the next one (upstream lacks this). On `gpui-pre`, a `measure_all` list measures its off-screen items over later frames after a width change, so a long `TextView` resizes without laying out every block per frame (gpui-fast 0.1.15 has it upstream). On `gpui-fast`, a wheel over nested scroll containers scrolls only the innermost one it moves, for the whole gesture, instead of every container under the pointer. `gpui-pre` also keeps `em` metrics for fonts without `m`, which gpui-fast 0.1.14 has upstream. |
 | `gpui-pre-apple` | Non-Latin and app-private fallback fonts, and `sbix` color fonts drawn as color bitmaps, on the upstream backend; gpui-fast 0.1.14 has them upstream. |
 | `gpui-pre-web` | The browser's IME panel opens at the caret, and a key or edit the IME owns stays whole, on the upstream backend; gpui-fast 0.1.14 has them upstream. Only matters on `wasm32`. |
 
@@ -203,12 +205,12 @@ beside upstream's `gpui-fps`; so does this workspace.
 
 | Vendored | Source | Why |
 | --- | --- | --- |
-| `gpui-kit` | crates.io 0.10.0 (tag `v0.10.0`, `f697c313`), unchanged source | Normalized manifest disables implicit WASM threading (`multithreaded-web` restores it). Hashes in `SOURCE.md`/`SOURCE.json`. |
-| `gpui-pre` (GPUI `=0.3.12`) | crates.io + patches (`SOURCE.json`, `*-patch.md`) | `em`/`ch` metrics for fonts without `m` (`em-fallback-patch.md`); lazy tab-stop index (`tab-stop-index-patch.md`); overflowing spaces hang instead of starting a wrapped row (`hanging-space-patch.md`); a width change lays out a `measure_all` list's shown items first and the rest over later frames (`list-width-remeasure-patch.md`); test-harness repairs; `try_update` for the deprecated `fetch_update` in the profiler. |
-| `gpui-pre-apple` | crates.io 0.3.12 + patches (`SOURCE.json`, `VENDORED.md`) | Non-Latin and app-private fallback fonts; `sbix` color fonts. |
-| `gpui-pre-web` | crates.io 0.3.12 + patches (`SOURCE.json`, `MATERIAL-PATCHES.md`) | Moves the hidden IME input to the caret when a composition starts and on `update_ime_position`, where a browser opens its candidate window and it takes no clicks; keeps a composition's keys from GPUI and a replaced emoji whole. |
-| `gpui-fast` | crates.io 0.1.16 + patches (`SOURCE.json`, `MATERIAL-PATCHES.md`), recorded by `scripts/vendor-gpui-fast.py --published 0.1.16` | Material's earlier Fast PRs are released in 0.1.14 and 0.1.15: wheel at its limit (#104), hover freeze for listeners (#105), released entities in a spliced view (#106), web IME (#108, #109, #110), macOS fonts (#111, #112), lazy tab stops (#113), `record_entities_accessed` (#114), `em` metrics (#115), `sbix` color fonts (#119), a `measure_all` list's measurement after a width change (#129). Local: hanging overflow spaces (`src/text_system/line_layout.rs`, `line_wrapper.rs`), a wheel scrolls only the innermost nested scroll container it moves and stays with it for the gesture (`src/fast/layers/wheel_latch.rs`), test-harness repairs, `try_update` for the deprecated `fetch_update`. |
-| `gpui-fast-apple` | crates.io 0.1.16 + a test (`SOURCE.json`, `MATERIAL-PATCHES.md`) | Workspace only, no runtime change: the `font_fallback` regression test with the Gallery's fonts, and a warning fix. Not in the consumer set. |
+| `gpui-kit` | crates.io 0.11.0 (tag `v0.11.0`, `e97fe438`), unchanged source | Normalized manifest disables implicit WASM threading (`multithreaded-web` restores it). Hashes in `SOURCE.md`/`SOURCE.json`. |
+| `gpui-pre` (GPUI `=0.3.14`) | crates.io + patches (`SOURCE.json`, `*-patch.md`) | `em`/`ch` metrics for fonts without `m` (`em-fallback-patch.md`); overflowing spaces hang instead of starting a wrapped row (`hanging-space-patch.md`); a width change lays out a `measure_all` list's shown items first and the rest over later frames (`list-width-remeasure-patch.md`); test-harness repairs. 0.3.14 has its own lazy tab-stop index and `try_update` in the profiler, so those patches are gone. |
+| `gpui-pre-apple` | crates.io 0.3.14 + patches (`SOURCE.json`, `VENDORED.md`) | Non-Latin and app-private fallback fonts; `sbix` color fonts. |
+| `gpui-pre-web` | crates.io 0.3.14 + patches (`SOURCE.json`, `MATERIAL-PATCHES.md`) | Moves the hidden IME input to the caret when a composition starts and on `update_ime_position`, where a browser opens its candidate window and it takes no clicks; keeps a composition's keys from GPUI and a replaced emoji whole. |
+| `gpui-fast` | crates.io 0.1.19 + patches (`SOURCE.json`, `MATERIAL-PATCHES.md`), recorded by `scripts/vendor-gpui-fast.py --published 0.1.19` | Material's earlier Fast PRs are released in 0.1.14 and 0.1.15: wheel at its limit (#104), hover freeze for listeners (#105), released entities in a spliced view (#106), web IME (#108, #109, #110), macOS fonts (#111, #112), lazy tab stops (#113), `record_entities_accessed` (#114), `em` metrics (#115), `sbix` color fonts (#119), a `measure_all` list's measurement after a width change (#129). Local: hanging overflow spaces (`src/text_system/line_layout.rs`, `line_wrapper.rs`), a wheel scrolls only the innermost nested scroll container it moves and stays with it for the gesture (`src/fast/layers/wheel_latch.rs`), test-harness repairs. 0.1.19 has `try_update` in the profiler upstream. |
+| `gpui-fast-apple` | crates.io 0.1.19 + a test (`SOURCE.json`, `MATERIAL-PATCHES.md`) | Workspace only, no runtime change: the `font_fallback` regression test with the Gallery's fonts (0.1.19 has the warning fix upstream). Not in the consumer set. |
 
 **Replaced by Material code.** No engine patch remains for these:
 
@@ -232,11 +234,12 @@ reference parity or the budget: reversal, per-transition reduced motion,
 page uses a playback handle. The Gallery's are in its buttons and loading pages.
 
 **Lazy tab stops.** `TabStopMap` records insertions during paint and builds the
-order and focus lookup on the first query after a change. Upstream's per-insertion
-`SumTree` update scales with the focusable elements a frame replays, which a
+order and focus lookup on the first query after a change, on both backends upstream
+(gpui-fast since 0.1.14, gpui-pre since 0.3.14), so no patch carries it. A per-insertion
+`SumTree` update scaled with the focusable elements a frame replays, which a
 composited scrolling list replays every frame, in Kit's lists as in Material's.
-Query results are upstream's, including gpui-kit#3612, which no Material widget
-reaches (`crates/material/tests/tab_stops.rs`).
+Query results include gpui-kit#3612, which no Material widget reaches
+(`crates/material/tests/tab_stops.rs`).
 
 **Backend selection.** Material, the Gallery, gallery-web and the benches expose
 `gpui-fast`, forwarding to Kit's backend feature; it is on by default. Material's `gpui` alias points to

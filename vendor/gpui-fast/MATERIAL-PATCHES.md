@@ -1,11 +1,11 @@
 # gpui-fast source
 
-`gpui-fast` 0.1.16 as published on crates.io, with the local changes below, recorded by
-`scripts/vendor-gpui-fast.py --published 0.1.16`. `SOURCE.json` records the archive's
+`gpui-fast` 0.1.19 as published on crates.io, with the local changes below, recorded by
+`scripts/vendor-gpui-fast.py --published 0.1.19`. `SOURCE.json` records the archive's
 SHA-256, every upstream file hash and the original and patched hash of each changed
 file. The package-level `Cargo.lock` is not vendored. The other gpui-fast crates
 (`-macos`, `-linux`, `-windows`, `-wgpu`, `-web`, `-platform`, `-macros`) come from
-crates.io 0.1.16 unchanged.
+crates.io 0.1.19 unchanged.
 
 Released in 0.1.15 and no longer patched here: a `measure_all` list measured over later
 frames after a width change (#129, upstream's `src/fast/list_measure.rs`).
@@ -16,9 +16,10 @@ hover freeze for listeners (#105), `record_entities_accessed` by what entered an
 left (#114), `em` metrics through fallback shaping (#115), lazy tab-stop index
 (#113, upstream's `src/fast/tab_stop.rs`; `src/tab_stop.rs` is unused upstream code).
 
-No API is added or changed. `src/profiler.rs` and `src/profiler/journal.rs` use
-`try_update` in place of the deprecated `fetch_update` (identical semantics), so
-deny-warnings builds cover the crate.
+Released in 0.1.19 and no longer patched here: `src/profiler.rs` and
+`src/profiler/journal.rs` use `try_update` in place of the deprecated `fetch_update`.
+
+No API is added or changed.
 
 Test harness: `src/style.rs` (`#[perf]` to `#[test]`), `src/svg_renderer.rs` and
 `tests/fonts/` (fonts the package omits), `examples/image/` (a fixture a

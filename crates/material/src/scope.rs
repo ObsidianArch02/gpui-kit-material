@@ -306,14 +306,6 @@ pub struct ScopeElement {
     child: AnyElement,
 }
 
-#[cfg(not(feature = "gpui-fast"))]
-impl IntoElement for ScopeElement {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 impl Element for ScopeElement {
     type RequestLayoutState = ();
     type PrepaintState = ();
@@ -369,14 +361,6 @@ impl Element for ScopeElement {
 struct ReplayElement {
     frame: Rc<Frame>,
     child: AnyElement,
-}
-
-#[cfg(not(feature = "gpui-fast"))]
-impl IntoElement for ReplayElement {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
 }
 
 impl Element for ReplayElement {

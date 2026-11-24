@@ -84,8 +84,6 @@ mod date_picker;
 #[cfg(feature = "pickers")]
 mod time_picker;
 #[cfg(feature = "pickers")]
-pub use chrono::{Datelike, NaiveDate, NaiveTime, Timelike, Weekday};
-#[cfg(feature = "pickers")]
 pub use date_parts::{
     CalendarDay, DAY_CELL, DayRange, PickerListItem, PickerMenuButton, YearChip, add_months,
     first_of_month, month_weeks, week_days,
@@ -96,6 +94,8 @@ pub use date_picker::{
     DatePickerEvent, DatePickerLabels, DatePickerState, DatePickerVariant, DatePickerView,
     DateSelection, PickerDialog, today,
 };
+#[cfg(feature = "pickers")]
+pub use jiff::civil::{Date, Time, Weekday};
 #[cfg(feature = "pickers")]
 pub use time_picker::{
     ClockDial, DIAL_SIZE, PeriodSelector, TimeFormat, TimeInputMode, TimeOrientation, TimePicker,

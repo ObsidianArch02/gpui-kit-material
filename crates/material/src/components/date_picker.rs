@@ -31,8 +31,9 @@
 //! arrow turns on the fast spatial spring. Reduced motion shows the new
 //! month at once.
 use super::date_parts::{
-    Activate, CalendarDay, DAY_CELL, DayRange, GRID_WEEKS, LIST_ITEM_HEIGHT, PickerListItem,
-    PickerMenuButton, YearChip, add_months, first_of_month, month_weeks, week_days,
+    Activate, CalendarDay, CalendarFields, DAY_CELL, DayRange, GRID_WEEKS, LIST_ITEM_HEIGHT,
+    PickerListItem, PickerMenuButton, YearChip, add_days, add_months, first_of_month, month_weeks,
+    week_days, ymd,
 };
 use super::text::type_style;
 use super::{
@@ -48,9 +49,9 @@ use crate::{
         typography::{TypeRole, rem},
     },
 };
-use chrono::{Datelike, Days, NaiveDate, Weekday};
 use gpui::{prelude::*, *};
 use gpui_base::input::{InputEvent, InputState};
+use jiff::civil::{Date, Weekday};
 use std::{ops::RangeInclusive, rc::Rc, time::Duration};
 
 pub use gpui_base::{Date as DateSelection, Matcher as DateMatcher};
@@ -92,7 +93,7 @@ pub(crate) fn init(cx: &mut App) {
 }
 
 type Format<T> = Rc<dyn Fn(T) -> SharedString>;
-type Parse = Rc<dyn Fn(&str) -> Option<NaiveDate>>;
+type Parse = Rc<dyn Fn(&str) -> Option<Date>>;
 
 /// The numeric date orders md3.io offers for text entry. The order is data; the
 /// placeholder naming it stays a caller-supplied label.
@@ -110,8 +111,8 @@ pub enum DateFormat {
 impl DateFormat {
     pub const ALL: [Self; 3] = [Self::MonthDayYear, Self::DayMonthYear, Self::YearMonthDay];
     /// `date` as this format writes it.
-    pub fn format(self, date: NaiveDate) -> SharedString {
-        let (y, m, d) = (date.year(), date.month(), date.day());
+    pub fn format(self, date: Date) -> SharedString {
+        let (y, m, d) = (date.year_i32(), date.month_u32(), date.day_u32());
         match self {
             Self::MonthDayYear => format!("{m:02}/{d:02}/{y}"),
             Self::DayMonthYear => format!("{d:02}/{m:02}/{y}"),
@@ -120,7 +121,7 @@ impl DateFormat {
         .into()
     }
     /// The date `text` writes in this format, if it names a real one.
-    pub fn parse(self, text: &str) -> Option<NaiveDate> {
+    pub fn parse(self, text: &str) -> Option<Date> {
         let separator = if self == Self::YearMonthDay { ' ' } else { '/' };
         let parts: Vec<&str> = text.trim().split(separator).map(str::trim).collect();
         let [a, b, c] = parts[..] else {
@@ -135,7 +136,7 @@ impl DateFormat {
         if y.len() < 4 {
             return None;
         }
-        NaiveDate::from_ymd_opt(y.parse().ok()?, m.parse().ok()?, d.parse().ok()?)
+        ymd(y.parse().ok()?, m.parse().ok()?, d.parse().ok()?)
     }
 }
 
@@ -155,7 +156,7 @@ impl DateFormat {
 ///     title: s("Select date"),
 ///     confirm: s("OK"),
 ///     cancel: s("Cancel"),
-///     headline: Rc::new(|date: NaiveDate| date.format("%a, %b %-d").to_string().into()),
+///     headline: Rc::new(|date: Date| date.strftime("%a, %b %-d").to_string().into()),
 ///     // …and every other string and formatter, from the app's locale.
 /// #     no_selection: s("Selected date"),
 /// #     input_headline: s("Enter date"),
@@ -175,19 +176,19 @@ impl DateFormat {
 /// #     end_field: s("End date"),
 /// #     input_placeholder: s("MM/DD/YYYY"),
 /// #     invalid_input: s("Use MM/DD/YYYY"),
-/// #     weekday: Rc::new(|day: Weekday| day.to_string()[..1].to_string().into()),
+/// #     weekday: Rc::new(|day: Weekday| format!("{day:?}")[..1].to_string().into()),
 /// #     month: Rc::new(|month| month.to_string().into()),
 /// #     month_short: Rc::new(|month| month.to_string().into()),
 /// #     month_year: Rc::new(|year, month| format!("{month}/{year}").into()),
 /// #     range_headline: Rc::new(|start, end| format!("{start:?} – {end:?}").into()),
-/// #     accessible_date: Rc::new(|date: NaiveDate| date.to_string().into()),
+/// #     accessible_date: Rc::new(|date: Date| date.to_string().into()),
 /// #     number: Rc::new(|n| n.to_string().into()),
 /// #     format_input: Rc::new(|date| DateFormat::MonthDayYear.format(date)),
 /// #     parse_input: Rc::new(|text| DateFormat::MonthDayYear.parse(text)),
 /// }
 /// // Type dates as DD/MM/YYYY.
 /// .date_format(DateFormat::DayMonthYear);
-/// let date = NaiveDate::from_ymd_opt(2025, 8, 17).unwrap();
+/// let date = Date::new(2025, 8, 17).unwrap();
 /// assert_eq!((labels.format_input)(date), "17/08/2025");
 /// ```
 #[derive(Clone)]
@@ -230,15 +231,15 @@ pub struct DatePickerLabels {
     /// "August 2025": the modal month button and full-screen month headers.
     pub month_year: Rc<dyn Fn(i32, u32) -> SharedString>,
     /// The single-date headline, e.g. "Mon, Aug 17".
-    pub headline: Format<NaiveDate>,
+    pub headline: Format<Date>,
     /// The range headline, e.g. "Aug 17 – Aug 23" (either end may be open).
-    pub range_headline: Rc<dyn Fn(Option<NaiveDate>, Option<NaiveDate>) -> SharedString>,
+    pub range_headline: Rc<dyn Fn(Option<Date>, Option<Date>) -> SharedString>,
     /// The full date announced for a day cell.
-    pub accessible_date: Format<NaiveDate>,
+    pub accessible_date: Format<Date>,
     /// A day-of-month or year number.
     pub number: Format<i32>,
     /// The text-input representation of a date, and its parser.
-    pub format_input: Format<NaiveDate>,
+    pub format_input: Format<Date>,
     pub parse_input: Parse,
 }
 
@@ -326,13 +327,13 @@ struct Slide {
 /// #         end_field: s("End date"),
 /// #         input_placeholder: s("MM/DD/YYYY"),
 /// #         invalid_input: s("Use MM/DD/YYYY"),
-/// #         weekday: Rc::new(|day: Weekday| day.to_string()[..1].to_string().into()),
+/// #         weekday: Rc::new(|day: Weekday| format!("{day:?}")[..1].to_string().into()),
 /// #         month: Rc::new(|month| month.to_string().into()),
 /// #         month_short: Rc::new(|month| month.to_string().into()),
 /// #         month_year: Rc::new(|year, month| format!("{month}/{year}").into()),
-/// #         headline: Rc::new(|date: NaiveDate| date.format("%a, %b %-d").to_string().into()),
+/// #         headline: Rc::new(|date: Date| date.strftime("%a, %b %-d").to_string().into()),
 /// #         range_headline: Rc::new(|start, end| format!("{start:?} – {end:?}").into()),
-/// #         accessible_date: Rc::new(|date: NaiveDate| date.format("%A %B %-d, %Y").to_string().into()),
+/// #         accessible_date: Rc::new(|date: Date| date.strftime("%A %B %-d, %Y").to_string().into()),
 /// #         number: Rc::new(|n| n.to_string().into()),
 /// #         format_input: Rc::new(|date| DateFormat::MonthDayYear.format(date)),
 /// #         parse_input: Rc::new(|text| DateFormat::MonthDayYear.parse(text)),
@@ -345,7 +346,7 @@ struct Slide {
 ///
 /// impl Trip {
 ///     fn new(cx: &mut Context<Self>) -> Self {
-///         let start = NaiveDate::from_ymd_opt(2025, 8, 17);
+///         let start = Date::new(2025, 8, 17).ok();
 ///         let dates = cx.new(|cx| {
 ///             DatePickerState::new(date_picker_labels(), today(), cx)
 ///                 .range()
@@ -360,10 +361,10 @@ pub struct DatePickerState {
     focus: FocusHandle,
     labels: Rc<DatePickerLabels>,
     selection: DateSelection,
-    today: NaiveDate,
+    today: Date,
     year: i32,
     month: u32,
-    cursor: NaiveDate,
+    cursor: Date,
     view: DatePickerView,
     mode: DateInputMode,
     disabled: Option<Rc<DateMatcher>>,
@@ -396,20 +397,20 @@ impl EventEmitter<DatePickerEvent> for DatePickerState {}
 
 impl DatePickerState {
     /// A single-date picker showing `today`'s month, with nothing selected.
-    pub fn new(labels: DatePickerLabels, today: NaiveDate, cx: &mut Context<Self>) -> Self {
+    pub fn new(labels: DatePickerLabels, today: Date, cx: &mut Context<Self>) -> Self {
         let state = Self {
             focus: cx.focus_handle().tab_stop(true),
             labels: Rc::new(labels),
             selection: DateSelection::Single(None),
             today,
-            year: today.year(),
-            month: today.month(),
+            year: today.year_i32(),
+            month: today.month_u32(),
             cursor: today,
             view: DatePickerView::Day,
             mode: DateInputMode::Calendar,
             disabled: None,
-            years: today.year() - 100..=today.year() + 100,
-            first_day: Weekday::Sun,
+            years: today.year_i32() - 100..=today.year_i32() + 100,
+            first_day: Weekday::Sunday,
             slide: None,
             generation: 0,
             year_scroll: UniformListScrollHandle::new(),
@@ -512,7 +513,7 @@ impl DatePickerState {
     pub fn value(&self) -> DateSelection {
         self.selection
     }
-    pub fn today(&self) -> NaiveDate {
+    pub fn today(&self) -> Date {
         self.today
     }
     /// The displayed `(year, month)`.
@@ -526,13 +527,13 @@ impl DatePickerState {
         self.mode
     }
     /// The keyboard cursor's date.
-    pub fn cursor(&self) -> NaiveDate {
+    pub fn cursor(&self) -> Date {
         self.cursor
     }
     pub fn is_range(&self) -> bool {
         !self.selection.is_single()
     }
-    pub fn is_disabled(&self, date: NaiveDate) -> bool {
+    pub fn is_disabled(&self, date: Date) -> bool {
         self.disabled.as_ref().is_some_and(|m| m.matched(&date))
     }
 
@@ -541,8 +542,8 @@ impl DatePickerState {
         if let Some(start) = selection.start() {
             // A date outside `years` stays selected, but the grid shows the
             // nearest month the picker offers.
-            (self.year, self.month) = clamp_month(&self.years, start.year(), start.month());
-            self.cursor = if (start.year(), start.month()) == (self.year, self.month) {
+            (self.year, self.month) = clamp_month(&self.years, start.year_i32(), start.month_u32());
+            self.cursor = if (start.year_i32(), start.month_u32()) == (self.year, self.month) {
                 start
             } else {
                 first_of_month(self.year, self.month)
@@ -563,10 +564,10 @@ impl DatePickerState {
     /// restarts, as in `gpui_base::CalendarState::select_date`. Disabled
     /// dates are ignored. Returns whether the selection changed; choosing the
     /// selected date again changes nothing, but still closes a closing picker.
-    pub fn select(&mut self, date: NaiveDate, cx: &mut Context<Self>) -> bool {
+    pub fn select(&mut self, date: Date, cx: &mut Context<Self>) -> bool {
         // An adjacent month's day can lie past the offered years, where the
         // grid cannot show it.
-        if self.is_disabled(date) || !self.years.contains(&date.year()) {
+        if self.is_disabled(date) || !self.years.contains(&date.year_i32()) {
             return false;
         }
         let previous = self.selection;
@@ -574,10 +575,10 @@ impl DatePickerState {
         let changed = self.selection != previous;
         self.cursor = date;
         self.inputs_stale = self.inputs.is_some();
-        if (date.year(), date.month()) != (self.year, self.month)
+        if (date.year_i32(), date.month_u32()) != (self.year, self.month)
             && self.view == DatePickerView::Day
         {
-            self.show_month(date.year(), date.month(), cx);
+            self.show_month(date.year_i32(), date.month_u32(), cx);
         }
         if changed {
             self.report_change(cx);
@@ -607,10 +608,10 @@ impl DatePickerState {
         let (year, month) = clamp_month(&self.years, year, month);
         let target = first_of_month(year, month);
         let current = (self.year, self.month);
-        let to = (target.year(), target.month());
-        if (self.cursor.year(), self.cursor.month()) != to {
-            let day = self.cursor.day().min(days_in_month(to.0, to.1));
-            self.cursor = NaiveDate::from_ymd_opt(to.0, to.1, day).unwrap_or(target);
+        let to = (target.year_i32(), target.month_u32());
+        if (self.cursor.year_i32(), self.cursor.month_u32()) != to {
+            let day = self.cursor.day_u32().min(days_in_month(to.0, to.1));
+            self.cursor = ymd(to.0, to.1, day).unwrap_or(target);
         }
         if to == current {
             return;
@@ -661,10 +662,12 @@ impl DatePickerState {
     pub fn set_view(&mut self, view: DatePickerView, cx: &mut Context<Self>) {
         if self.view != view {
             self.view = view;
-            self.cursor = NaiveDate::from_ymd_opt(
+            self.cursor = ymd(
                 self.year,
                 self.month,
-                self.cursor.day().min(days_in_month(self.year, self.month)),
+                self.cursor
+                    .day_u32()
+                    .min(days_in_month(self.year, self.month)),
             )
             .unwrap_or(self.cursor);
             self.reveal_cursor();
@@ -718,9 +721,8 @@ impl DatePickerState {
             return;
         };
         let format = self.labels.format_input.clone();
-        let text = |date: Option<NaiveDate>| -> SharedString {
-            date.map(|d| format(d)).unwrap_or_default()
-        };
+        let text =
+            |date: Option<Date>| -> SharedString { date.map(|d| format(d)).unwrap_or_default() };
         let (first, last) = (self.selection.start(), self.selection.end());
         start.update(cx, |input, cx| input.set_value(text(first), window, cx));
         if let Some(end) = end {
@@ -736,7 +738,7 @@ impl DatePickerState {
             return;
         };
         let parse = self.labels.parse_input.clone();
-        let read = |input: &Entity<InputState>, cx: &App| -> Result<Option<NaiveDate>, ()> {
+        let read = |input: &Entity<InputState>, cx: &App| -> Result<Option<Date>, ()> {
             let text = input.read(cx).value();
             let text = text.trim();
             if text.is_empty() {
@@ -746,7 +748,8 @@ impl DatePickerState {
         };
         let first = read(&start, cx);
         let last = end.as_ref().map(|end| read(end, cx));
-        let disabled = |d: &Result<Option<NaiveDate>, ()>| matches!(d, Ok(Some(date)) if self.is_disabled(*date));
+        let disabled =
+            |d: &Result<Option<Date>, ()>| matches!(d, Ok(Some(date)) if self.is_disabled(*date));
         self.invalid = (
             first.is_err() || disabled(&first),
             last.as_ref().is_some_and(|l| l.is_err() || disabled(l)),
@@ -787,16 +790,16 @@ impl DatePickerState {
     fn move_cursor(&mut self, step: CursorStep, cx: &mut Context<Self>) {
         let next = cursor_target(self.view, self.cursor, step, self.first_day);
         let years = self.years.clone();
-        let next = if years.contains(&next.year()) {
+        let next = if years.contains(&next.year_i32()) {
             next
         } else {
             self.cursor
         };
         self.cursor = next;
         if self.view == DatePickerView::Day
-            && (next.year(), next.month()) != (self.year, self.month)
+            && (next.year_i32(), next.month_u32()) != (self.year, self.month)
         {
-            self.show_month(next.year(), next.month(), cx);
+            self.show_month(next.year_i32(), next.month_u32(), cx);
         }
         self.reveal_cursor();
         cx.notify();
@@ -809,7 +812,7 @@ impl DatePickerState {
         let years = (self.years.end() - years_from + 1).max(1) as usize;
         match self.view {
             DatePickerView::Year => {
-                let index = ((self.cursor.year() - years_from).max(0) as usize).min(years - 1);
+                let index = ((self.cursor.year_i32() - years_from).max(0) as usize).min(years - 1);
                 self.year_scroll
                     .scroll_to_item(index / YEAR_COLUMNS, ScrollStrategy::Center);
                 self.list_scroll
@@ -817,7 +820,7 @@ impl DatePickerState {
             }
             DatePickerView::Month => {
                 self.list_scroll
-                    .scroll_to_item(self.cursor.month0() as usize, ScrollStrategy::Center);
+                    .scroll_to_item((self.cursor.month() - 1) as usize, ScrollStrategy::Center);
             }
             DatePickerView::Day => {
                 let index = month_list_index(&self.years, self.year, self.month0());
@@ -835,8 +838,8 @@ impl DatePickerState {
             DatePickerView::Day => {
                 self.select(self.cursor, cx);
             }
-            DatePickerView::Year => self.choose_year(self.cursor.year(), cx),
-            DatePickerView::Month => self.choose_month(self.cursor.month(), cx),
+            DatePickerView::Year => self.choose_year(self.cursor.year_i32(), cx),
+            DatePickerView::Month => self.choose_month(self.cursor.month_u32(), cx),
         }
     }
 }
@@ -851,7 +854,7 @@ impl Render for DatePickerState {
 /// inside the January of the first and the December of the last of `years`.
 fn clamp_month(years: &RangeInclusive<i32>, year: i32, month: u32) -> (i32, u32) {
     let date = first_of_month(year, month);
-    let to = (date.year(), date.month());
+    let to = (date.year_i32(), date.month_u32());
     if years.start() > years.end() {
         return to;
     }
@@ -868,7 +871,7 @@ fn month_list_index(years: &RangeInclusive<i32>, year: i32, month0: usize) -> us
 /// Whether `year`/`month` lies inside `years`.
 fn month_in_range(years: &RangeInclusive<i32>, year: i32, month: u32) -> bool {
     let date = first_of_month(year, month);
-    clamp_month(years, year, month) == (date.year(), date.month())
+    clamp_month(years, year, month) == (date.year_i32(), date.month_u32())
 }
 
 fn previous(year: i32, month: u32) -> (i32, u32) {
@@ -880,12 +883,11 @@ fn previous(year: i32, month: u32) -> (i32, u32) {
 }
 
 pub(crate) fn days_in_month(year: i32, month: u32) -> u32 {
-    let first = first_of_month(year, month);
-    (first_of_month(year, month + 1) - first).num_days() as u32
+    first_of_month(year, month).days_in_month() as u32
 }
 
 /// The range rule of `gpui_base::CalendarState::select_date`.
-pub(crate) fn next_selection(current: DateSelection, value: NaiveDate) -> DateSelection {
+pub(crate) fn next_selection(current: DateSelection, value: Date) -> DateSelection {
     match current {
         DateSelection::Single(_) => DateSelection::Single(Some(value)),
         DateSelection::Range(None, _) => DateSelection::Range(Some(value), None),
@@ -926,22 +928,16 @@ const fn selection_row_padding(view: DatePickerView) -> (f32, f32) {
 /// years in rows of three in the year grid, and one row in the docked lists.
 pub(crate) fn cursor_target(
     view: DatePickerView,
-    cursor: NaiveDate,
+    cursor: Date,
     step: CursorStep,
     first_day: Weekday,
-) -> NaiveDate {
+) -> Date {
     use CursorStep::*;
-    let days = |n: i64| {
-        if n >= 0 {
-            cursor + Days::new(n as u64)
-        } else {
-            cursor - Days::new(n.unsigned_abs())
-        }
-    };
+    let days = |n: i64| add_days(cursor, n);
     match (view, step) {
         // The month list shows one year, which a choice in it is taken in.
-        (DatePickerView::Month, PreviousMonth) if cursor.month() == 1 => cursor,
-        (DatePickerView::Month, NextMonth) if cursor.month() == 12 => cursor,
+        (DatePickerView::Month, PreviousMonth) if cursor.month_u32() == 1 => cursor,
+        (DatePickerView::Month, NextMonth) if cursor.month_u32() == 12 => cursor,
         (DatePickerView::Month, PreviousYear | NextYear) => cursor,
         (_, PreviousMonth) => add_months(cursor, -1),
         (_, NextMonth) => add_months(cursor, 1),
@@ -952,9 +948,7 @@ pub(crate) fn cursor_target(
         (DatePickerView::Day, Up) => days(-7),
         (DatePickerView::Day, Down) => days(7),
         (DatePickerView::Day, WeekStart | WeekEnd) => {
-            let offset = (cursor.weekday().num_days_from_sunday() + 7
-                - first_day.num_days_from_sunday())
-                % 7;
+            let offset = first_day.until(cursor.weekday());
             if step == WeekStart {
                 days(-(offset as i64))
             } else {
@@ -965,10 +959,10 @@ pub(crate) fn cursor_target(
         (DatePickerView::Year, Right) => add_months(cursor, 12),
         (DatePickerView::Year, Up) => add_months(cursor, -12 * YEAR_COLUMNS as i32),
         (DatePickerView::Year, Down) => add_months(cursor, 12 * YEAR_COLUMNS as i32),
-        (DatePickerView::Month, Up | Left) if cursor.month() > 1 => add_months(cursor, -1),
-        (DatePickerView::Month, Down | Right) if cursor.month() < 12 => add_months(cursor, 1),
-        (DatePickerView::Month, WeekStart) => add_months(cursor, 1 - cursor.month() as i32),
-        (DatePickerView::Month, WeekEnd) => add_months(cursor, 12 - cursor.month() as i32),
+        (DatePickerView::Month, Up | Left) if cursor.month_u32() > 1 => add_months(cursor, -1),
+        (DatePickerView::Month, Down | Right) if cursor.month_u32() < 12 => add_months(cursor, 1),
+        (DatePickerView::Month, WeekStart) => add_months(cursor, 1 - cursor.month_u32() as i32),
+        (DatePickerView::Month, WeekEnd) => add_months(cursor, 12 - cursor.month_u32() as i32),
         (DatePickerView::Year, WeekStart | WeekEnd) | (DatePickerView::Month, _) => cursor,
     }
 }
@@ -1094,10 +1088,10 @@ impl DatePicker {
 struct Snapshot {
     labels: Rc<DatePickerLabels>,
     selection: DateSelection,
-    today: NaiveDate,
+    today: Date,
     year: i32,
     month: u32,
-    cursor: NaiveDate,
+    cursor: Date,
     view: DatePickerView,
     mode: DateInputMode,
     disabled: Option<Rc<DateMatcher>>,
@@ -1123,7 +1117,7 @@ impl Snapshot {
             total.rem_euclid(12) as u32 + 1,
         )
     }
-    fn is_disabled(&self, date: NaiveDate) -> bool {
+    fn is_disabled(&self, date: Date) -> bool {
         self.disabled.as_ref().is_some_and(|m| m.matched(&date))
     }
     fn headline(&self) -> SharedString {
@@ -1135,7 +1129,7 @@ impl Snapshot {
             DateSelection::Range(start, end) => (self.labels.range_headline)(start, end),
         }
     }
-    fn range_of(&self, date: NaiveDate) -> (bool, DayRange) {
+    fn range_of(&self, date: Date) -> (bool, DayRange) {
         match self.selection {
             DateSelection::Single(selected) => (selected == Some(date), DayRange::None),
             DateSelection::Range(Some(start), Some(end)) if start != end => {
@@ -1528,7 +1522,7 @@ impl PickerCx {
                     .flex()
                     .role(Role::Row)
                     .children(week.into_iter().map(|date| {
-                        let outside = date.month() != month;
+                        let outside = date.month_u32() != month;
                         if outside && !adjacent {
                             return div().size(rem(DAY_CELL)).flex_shrink_0().into_any_element();
                         }
@@ -1537,21 +1531,21 @@ impl PickerCx {
             }))
     }
 
-    fn day(&self, date: NaiveDate, outside: bool, live: bool, key: &str) -> CalendarDay {
+    fn day(&self, date: Date, outside: bool, live: bool, key: &str) -> CalendarDay {
         let snap = &self.snap;
         let (selected, range) = if outside {
             (false, DayRange::None)
         } else {
             snap.range_of(date)
         };
-        let id = SharedString::from(format!("{key}-{}", date.num_days_from_ce()));
-        let mut day = CalendarDay::new(id, (snap.labels.number)(date.day() as i32))
+        let id = SharedString::from(format!("{key}-{date}"));
+        let mut day = CalendarDay::new(id, (snap.labels.number)(date.day_u32() as i32))
             .accessible_label((snap.labels.accessible_date)(date))
             .selected(selected)
             .today(date == snap.today && !outside)
             .adjacent(outside)
             .range(range)
-            .disabled(snap.is_disabled(date) || !snap.years.contains(&date.year()));
+            .disabled(snap.is_disabled(date) || !snap.years.contains(&date.year_i32()));
         if self.specimen || !live {
             day = day.preview_state(InteractionPreview::Enabled);
         } else {
@@ -1656,7 +1650,7 @@ impl PickerCx {
                                 } else {
                                     let state = state.clone();
                                     chip = chip
-                                        .cursor(snap.focused && year == snap.cursor.year())
+                                        .cursor(snap.focused && year == snap.cursor.year_i32())
                                         .on_click(move |_, cx| {
                                             state.update(cx, |s, cx| s.choose_year(year, cx))
                                         });
@@ -1938,14 +1932,14 @@ impl PickerCx {
                         (
                             (snap.labels.month)(month),
                             month == snap.month,
-                            month == snap.cursor.month(),
+                            month == snap.cursor.month_u32(),
                         )
                     } else {
                         let year = first + index as i32;
                         (
                             (snap.labels.number)(year),
                             year == snap.year,
-                            year == snap.cursor.year(),
+                            year == snap.cursor.year_i32(),
                         )
                     };
                     let mut item = PickerListItem::new(index, label).selected(selected);
@@ -2150,8 +2144,8 @@ impl PickerCx {
 }
 
 /// Today's date on the local clock, for a picker's today marker.
-pub fn today() -> NaiveDate {
-    chrono::Local::now().date_naive()
+pub fn today() -> Date {
+    jiff::ZonedDateTime::now().date()
 }
 
 /// A modal host for pickers: a scrim and a centered dialog over the

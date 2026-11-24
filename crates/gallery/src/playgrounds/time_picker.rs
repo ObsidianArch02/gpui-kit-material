@@ -128,15 +128,15 @@ pub static PLAYGROUND: Playground = Playground {
 };
 
 /// A 24-hour `HH:MM` or `HH:MM:SS` time.
-fn parse_time(text: &str) -> Option<NaiveTime> {
+fn parse_time(text: &str) -> Option<Time> {
     let text = text.trim();
-    NaiveTime::parse_from_str(text, "%H:%M:%S")
-        .or_else(|_| NaiveTime::parse_from_str(text, "%H:%M"))
+    Time::strptime("%H:%M:%S", text)
+        .or_else(|_| Time::strptime("%H:%M", text))
         .ok()
 }
 
-fn format_time(time: NaiveTime, seconds: bool) -> SharedString {
-    time.format(if seconds { "%H:%M:%S" } else { "%H:%M" })
+fn format_time(time: Time, seconds: bool) -> SharedString {
+    time.strftime(if seconds { "%H:%M:%S" } else { "%H:%M" })
         .to_string()
         .into()
 }
@@ -169,7 +169,7 @@ struct Build {
     input: bool,
     seconds: bool,
     step: u32,
-    limits: Option<(NaiveTime, NaiveTime)>,
+    limits: Option<(Time, Time)>,
 }
 
 /// The preview's picker state, rebuilt with its configuration.
@@ -204,7 +204,7 @@ fn preview(
         limits,
     };
     let time = parse_time(&config.text("time"))
-        .unwrap_or_else(|| NaiveTime::from_hms_opt(9, 41, 0).expect("a valid time"));
+        .unwrap_or_else(|| Time::new(9, 41, 0, 0).expect("a valid time"));
     let holder = preview.local("picker", window, cx, |_, _| Picker(None));
     let rebuild = preview.changed("time-build", spec.clone()) || holder.read(cx).0.is_none();
     let state = if rebuild {
@@ -265,9 +265,9 @@ fn preview(
 }
 
 /// `time` as the Rust expression that builds it.
-fn time_code(time: NaiveTime) -> String {
+fn time_code(time: Time) -> String {
     format!(
-        "NaiveTime::from_hms_opt({}, {}, {}).unwrap()",
+        "Time::new({}, {}, {}, 0).unwrap()",
         time.hour(),
         time.minute(),
         time.second()
@@ -287,7 +287,7 @@ fn code(config: &Config) -> String {
         })
         .flatten();
     let time = parse_time(&config.text("time"))
-        .unwrap_or_else(|| NaiveTime::from_hms_opt(9, 41, 0).expect("a valid time"));
+        .unwrap_or_else(|| Time::new(9, 41, 0, 0).expect("a valid time"));
     // The labels carry the caller's strings; the title is the configured one.
     let labels = format!(
         "TimePickerLabels {{\n    select_title: {title}.into(),\n    enter_title: {title}.into(),\n    ..time_picker_labels()\n}}",
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn times_parse_with_or_without_seconds() {
-        let t = |h, m, s| NaiveTime::from_hms_opt(h, m, s).unwrap();
+        let t = |h, m, s| Time::new(h, m, s, 0).unwrap();
         assert_eq!(parse_time("09:41"), Some(t(9, 41, 0)));
         assert_eq!(parse_time("07:45:30"), Some(t(7, 45, 30)));
         assert_eq!(parse_time("25:00"), None);
@@ -393,7 +393,7 @@ mod tests {
             code.contains("select_title: \"Select time\".into()"),
             "{code}"
         );
-        assert!(code.contains("NaiveTime::from_hms_opt(9, 41, 0)"), "{code}");
+        assert!(code.contains("Time::new(9, 41, 0, 0)"), "{code}");
         assert!(
             code.contains("TimePicker::new(\"time-picker\", &self.picker)"),
             "{code}"
