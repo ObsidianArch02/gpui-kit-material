@@ -18,15 +18,15 @@ color from [gpui-kit-material-color](https://crates.io/crates/gpui-kit-material-
 
 ```toml
 [dependencies]
-gpui-kit = "0.10.0"
-gpui-kit-material = "0.2"
+gpui-kit = "0.11.0"
+gpui-kit-material = "0.3"
 ```
 
-Use the `gpui-kit` release this crate depends on (0.10.0 or a later 0.10), so that Kit,
+Use the `gpui-kit` release this crate depends on (0.11.0 or a later 0.11), so that Kit,
 Base, GPUI and the Symbols crate resolve to one implementation; no `[patch]` is
 needed. Minimum Rust: **1.98**.
 
-In the browser, published Kit 0.10.0 builds its Web platform multithreaded, which needs the
+In the browser, published Kit 0.11.0 builds its Web platform multithreaded, which needs the
 nightly toolchain its [WebAssembly guide](https://github.com/longbridge/gpui-kit/blob/main/website/docs/webassembly.md)
 names (`wasm_thread` does not build on stable).
 
