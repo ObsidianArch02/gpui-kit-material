@@ -1,6 +1,6 @@
 # Width change on a `measure_all` list
 
-Source: the published Apache-2.0 `gpui-pre` 0.3.12 package (`SOURCE.json`), the
+Source: the published Apache-2.0 `gpui-pre` 0.3.14 package (`SOURCE.json`), the
 same in `vendor/gpui-fast`. File: `src/elements/list.rs`.
 
 **Why.** On a width change, upstream's `List::prepaint` drops every item's height

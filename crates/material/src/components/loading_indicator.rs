@@ -181,7 +181,7 @@ fn determinate() -> &'static (Morph, f32) {
 }
 
 /// The frame's outline, in a container of `container` px around `center`.
-fn frame_path(frame: LoadingFrame, center: Point<Pixels>, container: f32) -> Option<Path<Pixels>> {
+fn frame_path(frame: LoadingFrame, center: Point<Pixels>, container: f32) -> Option<Path> {
     let side = container * ACTIVE_INDICATOR_SCALE;
     let turn = frame.rotation_degrees;
     let (from, to) = (frame.from, frame.to);

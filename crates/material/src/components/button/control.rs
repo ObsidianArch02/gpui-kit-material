@@ -190,14 +190,6 @@ struct Busy<E> {
     busy: bool,
 }
 
-#[cfg(not(feature = "gpui-fast"))]
-impl<E: Element> IntoElement for Busy<E> {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 impl<E: Element> Element for Busy<E> {
     type RequestLayoutState = E::RequestLayoutState;
     type PrepaintState = E::PrepaintState;

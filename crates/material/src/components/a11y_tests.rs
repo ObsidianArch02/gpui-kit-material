@@ -199,7 +199,7 @@ fn overlays_rows_and_items_announce_names_and_states(cx: &mut TestAppContext) {
     let (_, cx) = cx.add_window_view(|window, cx| {
         window.set_rem_size(px(crate::tokens::typography::BASE_PX));
         Screen(cx.new(|cx| {
-            let time = chrono::NaiveTime::from_hms_opt(7, 0, 0).unwrap();
+            let time = jiff::civil::Time::new(7, 0, 0, 0).unwrap();
             let mut picker = TimePickerState::new(time_labels(), time, window, cx);
             picker.toggle_mode(window, cx);
             picker

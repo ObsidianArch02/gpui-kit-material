@@ -2,8 +2,8 @@
 
 Source repository: <https://github.com/longbridge/gpui-kit>
 
-Source release: `gpui-kit` 0.10.0, tag `v0.10.0`,
-revision `f697c3133d55c64fa8a5b67926147fb3dadd276d`
+Source release: `gpui-kit` 0.11.0, tag `v0.11.0`,
+revision `e97fe438129c5e4ccab504f2e6fafd9a4e396bba`
 
 The complete `crates/kit` directory is copied without implementation changes.
 `Cargo.toml.orig` preserves the original manifest. `SOURCE.json` records SHA-256
@@ -13,8 +13,8 @@ licenses, and the generated local manifest. `LICENSE-APACHE` and
 
 The local `Cargo.toml` expands the source workspace's edition, Clippy lints and
 dependency declarations. Source workspace siblings (`gpui-base`,
-`gpui-component`, `gpui-kit-assets`) are the same 0.10.0 release on crates.io, as in
-the published `gpui-kit` 0.10.0. Moving to another release means refreshing the
+`gpui-component`, `gpui-kit-assets`) are the same 0.11.0 release on crates.io, as in
+the published `gpui-kit` 0.11.0. Moving to another release means refreshing the
 facade copy and this tag together.
 
 The behavioral manifest changes are limited to platform feature selection:

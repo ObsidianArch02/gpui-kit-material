@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproduce the local manifest from the released, unmodified Kit checkout (tag v0.10.0)."""
+"""Reproduce the local manifest from the released, unmodified Kit checkout (tag v0.11.0)."""
 import hashlib
 import difflib
 import json
@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tomllib
 
-REVISION = 'f697c3133d55c64fa8a5b67926147fb3dadd276d'
+REVISION = 'e97fe438129c5e4ccab504f2e6fafd9a4e396bba'
 REPOSITORY = 'https://github.com/longbridge/gpui-kit'
 source = Path(sys.argv[1]).resolve()
 destination = Path(__file__).resolve().parent

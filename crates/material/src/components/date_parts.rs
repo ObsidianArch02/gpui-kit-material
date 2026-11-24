@@ -31,8 +31,8 @@ use crate::{
         typography::{TypeRole, rem},
     },
 };
-use chrono::{Datelike, Days, Months, NaiveDate, Weekday};
 use gpui::{prelude::*, *};
+use jiff::civil::{Date, Weekday};
 use std::rc::Rc;
 
 /// The day cell's square and its circular container, in dp.
@@ -50,36 +50,64 @@ pub(crate) type Activate = Rc<dyn Fn(&mut Window, &mut App)>;
 
 /// The weeks shown for `year`/`month` starting on `first_day`: always
 /// `GRID_WEEKS` (six) rows of seven dates, padded with adjacent-month days.
-pub fn month_weeks(year: i32, month: u32, first_day: Weekday) -> Vec<[NaiveDate; 7]> {
+pub fn month_weeks(year: i32, month: u32, first_day: Weekday) -> Vec<[Date; 7]> {
     let first = first_of_month(year, month);
-    let offset =
-        (first.weekday().num_days_from_sunday() + 7 - first_day.num_days_from_sunday()) % 7;
-    let start = first - Days::new(offset as u64);
+    let offset = first_day.until(first.weekday());
+    let start = add_days(first, -i64::from(offset));
     (0..GRID_WEEKS)
-        .map(|week| std::array::from_fn(|day| start + Days::new((week * 7 + day) as u64)))
+        .map(|week| std::array::from_fn(|day| add_days(start, (week * 7 + day) as i64)))
         .collect()
 }
 
 /// The first day of `month` (1-based) in `year`; months outside 1..=12
 /// carry into adjacent years.
-pub fn first_of_month(year: i32, month: u32) -> NaiveDate {
+pub fn first_of_month(year: i32, month: u32) -> Date {
     let total = year as i64 * 12 + month as i64 - 1;
-    NaiveDate::from_ymd_opt(
-        total.div_euclid(12) as i32,
-        total.rem_euclid(12) as u32 + 1,
-        1,
-    )
-    .unwrap_or(NaiveDate::MIN)
+    i32::try_from(total.div_euclid(12))
+        .ok()
+        .and_then(|year| ymd(year, total.rem_euclid(12) as u32 + 1, 1))
+        .unwrap_or(Date::MIN)
 }
 
 /// `date` moved by `months`, clamped to the end of shorter months.
-pub fn add_months(date: NaiveDate, months: i32) -> NaiveDate {
-    let moved = if months >= 0 {
-        date.checked_add_months(Months::new(months as u32))
-    } else {
-        date.checked_sub_months(Months::new(months.unsigned_abs()))
-    };
-    moved.unwrap_or(date)
+pub fn add_months(date: Date, months: i32) -> Date {
+    date.checked_add(jiff::Span::new().months(months))
+        .unwrap_or(date)
+}
+
+/// A date's year, month and day at the widths the pickers' own API takes them
+/// (`i32` years, `u32` months and days).
+pub(crate) trait CalendarFields {
+    fn year_i32(self) -> i32;
+    fn month_u32(self) -> u32;
+    fn day_u32(self) -> u32;
+}
+
+impl CalendarFields for Date {
+    fn year_i32(self) -> i32 {
+        self.year().into()
+    }
+    fn month_u32(self) -> u32 {
+        self.month() as u32
+    }
+    fn day_u32(self) -> u32 {
+        self.day() as u32
+    }
+}
+
+/// The date `year`-`month`-`day`, if it exists.
+pub(crate) fn ymd(year: i32, month: u32, day: u32) -> Option<Date> {
+    Date::new(
+        year.try_into().ok()?,
+        month.try_into().ok()?,
+        day.try_into().ok()?,
+    )
+    .ok()
+}
+
+/// `date` moved by `days`, saturating at the supported range.
+pub(crate) fn add_days(date: Date, days: i64) -> Date {
+    date.saturating_add(jiff::Span::new().days(days))
 }
 
 /// The weekdays of a grid row starting at `first_day`.
@@ -87,7 +115,7 @@ pub fn week_days(first_day: Weekday) -> [Weekday; 7] {
     let mut day = first_day;
     std::array::from_fn(|_| {
         let current = day;
-        day = day.succ();
+        day = day.next();
         current
     })
 }

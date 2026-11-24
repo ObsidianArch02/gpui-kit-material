@@ -15,10 +15,9 @@ yanked = "deny"
 # zvariant, zbus_names, rustls-pemfile) that only upstream can replace.
 unmaintained = "workspace"
 ignore = [
-    # chrono is unmaintained, with no replacement release. The pickers re-export its date
-    # types, and gpui-kit and the vendored engine crates depend on it, so moving off it is
-    # a breaking change to make with upstream.
-    { id = "RUSTSEC-2026-0543", reason = "chrono: public picker API and the GPUI stack depend on it" },
+    # chrono is unmaintained, with no replacement release. The pickers moved to jiff with
+    # gpui-kit 0.11, but the engine (gpui-pre, Zed's GPUI) still depends on it.
+    { id = "RUSTSEC-2026-0543", reason = "chrono: the GPUI engine depends on it" },
 ]
 
 [licenses]

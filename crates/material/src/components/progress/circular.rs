@@ -168,7 +168,7 @@ fn geometry(frame: CircularProgressFrame) -> (ArcGeometry, ArcGeometry) {
 /// Filled outline of a radius-11, thickness-2 arc with circular end caps.
 /// Filling the outline before scaling preserves the reference's elliptical
 /// strokes and caps when its 24-unit bitmap is squeezed into a 20×24 CSS box.
-fn arc_path(bounds: Bounds<Pixels>, arc: ArcGeometry) -> Option<Path<Pixels>> {
+fn arc_path(bounds: Bounds<Pixels>, arc: ArcGeometry) -> Option<Path> {
     if arc.sweep <= 0. || bounds.size.width <= px(0.) || bounds.size.height <= px(0.) {
         return None;
     }

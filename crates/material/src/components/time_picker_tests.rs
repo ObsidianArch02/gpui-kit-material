@@ -1,8 +1,8 @@
 use super::*;
 use core::prelude::v1::test;
 
-fn t(h: u32, m: u32) -> NaiveTime {
-    NaiveTime::from_hms_opt(h, m, 0).unwrap()
+fn t(h: u32, m: u32) -> Time {
+    hms(h, m, 0).unwrap()
 }
 
 pub(crate) fn labels() -> TimePickerLabels {
@@ -268,7 +268,7 @@ fn seconds_steps_and_limits_shape_the_state(cx: &mut TestAppContext) {
     cx.update(|window, cx| state.update(cx, |s, cx| s.step(-1, window, cx)));
     assert_eq!(
         state.read_with(cx, |s, _| s.time()),
-        NaiveTime::from_hms_opt(12, 0, 59).unwrap(),
+        hms(12, 0, 59).unwrap(),
         "seconds wrap within the minute"
     );
     draw(cx);

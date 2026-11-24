@@ -27,7 +27,7 @@ pub const DEFAULT_SIZE: f32 = 48.;
 /// a row, so a running morph, whose key changes every frame, stores nothing.
 pub(crate) struct PathCache<K> {
     key: Option<K>,
-    path: Option<Path<Pixels>>,
+    path: Option<Path>,
 }
 
 impl<K> Default for PathCache<K> {
@@ -41,11 +41,7 @@ impl<K> Default for PathCache<K> {
 
 impl<K: PartialEq> PathCache<K> {
     /// The path for `key`, from `build` unless it is already held.
-    pub(crate) fn path(
-        &mut self,
-        key: K,
-        build: impl FnOnce() -> Option<Path<Pixels>>,
-    ) -> Option<Path<Pixels>> {
+    pub(crate) fn path(&mut self, key: K, build: impl FnOnce() -> Option<Path>) -> Option<Path> {
         if self.key.as_ref() != Some(&key) {
             self.key = Some(key);
             self.path = None;
@@ -65,7 +61,7 @@ fn outline_path(
     center: Point<Pixels>,
     side: f32,
     rotation_degrees: f32,
-) -> Option<Path<Pixels>> {
+) -> Option<Path> {
     let mut bounds = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
     each(&mut |cubic| {
         for [x, y] in cubic.points.as_chunks::<2>().0 {
@@ -107,7 +103,7 @@ pub fn polygon_path(
     center: Point<Pixels>,
     side: f32,
     rotation_degrees: f32,
-) -> Option<Path<Pixels>> {
+) -> Option<Path> {
     outline_path(
         |visit| polygon.cubics().iter().for_each(&mut *visit),
         center,
@@ -125,7 +121,7 @@ pub fn morph_path(
     center: Point<Pixels>,
     side: f32,
     rotation_degrees: f32,
-) -> Option<Path<Pixels>> {
+) -> Option<Path> {
     outline_path(
         |visit| morph.for_each_cubic(progress, &mut *visit),
         center,
@@ -166,7 +162,7 @@ impl ShapeFrame {
     }
 
     /// The frame's path in a square of `side` px around `center`.
-    pub fn path(self, center: Point<Pixels>, side: f32) -> Option<Path<Pixels>> {
+    pub fn path(self, center: Point<Pixels>, side: f32) -> Option<Path> {
         if self.from == self.to {
             polygon_path(self.to.polygon(), center, side, self.rotation_degrees)
         } else {

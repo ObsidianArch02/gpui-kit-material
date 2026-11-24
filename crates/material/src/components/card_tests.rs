@@ -525,9 +525,18 @@ fn rounded_card(cx: &mut TestAppContext, clip: bool) -> (f32, gpui::Bounds<f32>,
     cx.update(|window, _| {
         let scale = window.scale_factor();
         let quads = window.painted_quads();
+        // GPUI Fast paints a rounded quad in pieces, each under its own mask: a
+        // square interior and the rounded strips along its edges. The fill's
+        // radius is the one its rounded pieces carry.
         let fill = quads
             .iter()
-            .find(|q| q.bounds.size.width.0 == 100. * scale && !q.background.is_transparent())
+            .filter(|q| q.bounds.size.width.0 == 100. * scale && !q.background.is_transparent())
+            .max_by(|a, b| {
+                a.corner_radii
+                    .top_left
+                    .0
+                    .total_cmp(&b.corner_radii.top_left.0)
+            })
             .expect("the card's fill");
         let ring = quads
             .iter()
@@ -637,9 +646,18 @@ fn a_fixed_height_cards_surface_clips_its_content_to_the_card(cx: &mut TestAppCo
     cx.update(|window, _| {
         let scale = window.scale_factor();
         let quads = window.painted_quads();
+        // GPUI Fast paints a rounded quad in pieces, each under its own mask: a
+        // square interior and the rounded strips along its edges. The fill's
+        // radius is the one its rounded pieces carry.
         let fill = quads
             .iter()
-            .find(|q| q.bounds.size.width.0 == 100. * scale && !q.background.is_transparent())
+            .filter(|q| q.bounds.size.width.0 == 100. * scale && !q.background.is_transparent())
+            .max_by(|a, b| {
+                a.corner_radii
+                    .top_left
+                    .0
+                    .total_cmp(&b.corner_radii.top_left.0)
+            })
             .expect("the card's fill");
         assert_eq!(
             fill.bounds.size.height.0,

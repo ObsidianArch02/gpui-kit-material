@@ -4,8 +4,8 @@ use crate::components::date_parts::{
 };
 use core::prelude::v1::test;
 
-fn d(y: i32, m: u32, day: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(y, m, day).unwrap()
+fn d(y: i32, m: u32, day: u32) -> Date {
+    ymd(y, m, day).unwrap()
 }
 
 pub(crate) fn labels() -> DatePickerLabels {
@@ -32,27 +32,27 @@ pub(crate) fn labels() -> DatePickerLabels {
         end_field: s("End date"),
         input_placeholder: s("mm/dd/yyyy"),
         invalid_input: s("Invalid"),
-        weekday: Rc::new(|w: Weekday| w.to_string()[..1].to_string().into()),
+        weekday: Rc::new(|w: Weekday| format!("{w:?}")[..1].to_string().into()),
         month: Rc::new(|m| m.to_string().into()),
         month_short: Rc::new(|m| m.to_string().into()),
         month_year: Rc::new(|y, m| format!("{m}/{y}").into()),
-        headline: Rc::new(|d: NaiveDate| d.to_string().into()),
+        headline: Rc::new(|d: Date| d.to_string().into()),
         range_headline: Rc::new(|a, b| format!("{a:?}-{b:?}").into()),
-        accessible_date: Rc::new(|d: NaiveDate| d.to_string().into()),
+        accessible_date: Rc::new(|d: Date| d.to_string().into()),
         number: Rc::new(|n| n.to_string().into()),
-        format_input: Rc::new(|d: NaiveDate| d.format("%m/%d/%Y").to_string().into()),
-        parse_input: Rc::new(|t| NaiveDate::parse_from_str(t, "%m/%d/%Y").ok()),
+        format_input: Rc::new(|d: Date| d.strftime("%m/%d/%Y").to_string().into()),
+        parse_input: Rc::new(|t| Date::strptime("%m/%d/%Y", t).ok()),
     }
 }
 
 #[test]
 fn month_grid_has_six_weeks_starting_on_the_first_weekday() {
-    let weeks = month_weeks(2025, 8, Weekday::Sun);
+    let weeks = month_weeks(2025, 8, Weekday::Sunday);
     assert_eq!(weeks.len(), 6);
     // August 2025 starts on a Friday: the grid opens on Sunday, July 27.
     assert_eq!(weeks[0][0], d(2025, 7, 27));
     assert_eq!(weeks[0][5], d(2025, 8, 1));
-    let monday = month_weeks(2025, 8, Weekday::Mon);
+    let monday = month_weeks(2025, 8, Weekday::Monday);
     assert_eq!(monday[0][0], d(2025, 7, 28));
     assert_eq!(days_in_month(2024, 2), 29);
     assert_eq!(days_in_month(2025, 12), 31);
@@ -88,7 +88,7 @@ fn range_selection_follows_base_calendar_rules() {
 fn keyboard_steps_move_by_day_week_month_and_year() {
     use CursorStep::*;
     let c = d(2025, 8, 17); // a Sunday
-    let day = |s| cursor_target(DatePickerView::Day, c, s, Weekday::Sun);
+    let day = |s| cursor_target(DatePickerView::Day, c, s, Weekday::Sunday);
     assert_eq!(day(Left), d(2025, 8, 16));
     assert_eq!(day(Right), d(2025, 8, 18));
     assert_eq!(day(Up), d(2025, 8, 10));
@@ -98,18 +98,23 @@ fn keyboard_steps_move_by_day_week_month_and_year() {
     assert_eq!(day(WeekStart), c);
     assert_eq!(day(WeekEnd), d(2025, 8, 23));
     assert_eq!(
-        cursor_target(DatePickerView::Day, d(2025, 1, 31), NextMonth, Weekday::Sun),
+        cursor_target(
+            DatePickerView::Day,
+            d(2025, 1, 31),
+            NextMonth,
+            Weekday::Sunday
+        ),
         d(2025, 2, 28),
         "month steps clamp to shorter months"
     );
-    let year = |s| cursor_target(DatePickerView::Year, c, s, Weekday::Sun);
+    let year = |s| cursor_target(DatePickerView::Year, c, s, Weekday::Sunday);
     assert_eq!(year(Right).year(), 2026);
     assert_eq!(year(Down).year(), 2028);
-    let month = |s| cursor_target(DatePickerView::Month, c, s, Weekday::Sun);
+    let month = |s| cursor_target(DatePickerView::Month, c, s, Weekday::Sunday);
     assert_eq!(month(Down).month(), 9);
     assert_eq!(month(WeekEnd).month(), 12);
     assert_eq!(
-        cursor_target(DatePickerView::Month, d(2025, 12, 1), Down, Weekday::Sun),
+        cursor_target(DatePickerView::Month, d(2025, 12, 1), Down, Weekday::Sunday),
         d(2025, 12, 1),
         "the month list does not wrap into another year"
     );
@@ -177,7 +182,7 @@ fn the_grid_is_keyboard_operable(cx: &mut TestAppContext) {
     let (view, cx) = cx.add_window_view(|_, cx| {
         let state = cx.new(|cx| {
             DatePickerState::new(labels(), d(2025, 8, 5), cx)
-                .disabled_dates(DateMatcher::custom(|date: &NaiveDate| date.day() == 7))
+                .disabled_dates(DateMatcher::custom(|date: &Date| date.day() == 7))
         });
         Harness(state)
     });
@@ -284,7 +289,7 @@ fn chevrons_and_set_value_respect_the_years(cx: &mut TestAppContext) {
 
 #[test]
 fn dates_format_and_parse_in_every_format() {
-    let d = NaiveDate::from_ymd_opt(2025, 8, 17).unwrap();
+    let d = d(2025, 8, 17);
     assert_eq!(DateFormat::MonthDayYear.format(d), "08/17/2025");
     assert_eq!(DateFormat::DayMonthYear.format(d), "17/08/2025");
     assert_eq!(DateFormat::YearMonthDay.format(d), "2025 08 17");
@@ -483,7 +488,7 @@ fn a_date_outside_the_offered_years_cannot_be_selected(cx: &mut TestAppContext) 
 #[test]
 fn month_list_keys_stay_in_the_year() {
     use CursorStep::*;
-    let at = |date, step| cursor_target(DatePickerView::Month, date, step, Weekday::Sun);
+    let at = |date, step| cursor_target(DatePickerView::Month, date, step, Weekday::Sunday);
     assert_eq!(at(d(2026, 1, 5), PreviousMonth), d(2026, 1, 5));
     assert_eq!(at(d(2026, 12, 5), NextMonth), d(2026, 12, 5));
     assert_eq!(at(d(2026, 6, 5), PreviousMonth), d(2026, 5, 5));
